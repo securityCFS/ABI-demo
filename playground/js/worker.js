@@ -36,7 +36,10 @@ const fetchJSON = async p => JSON.parse(await fetchText(p));
 // loading forever. The stall test is over all downloads together: over HTTP/2 the browser serves the requests of one
 // page roughly one after another, so a request queued behind the 24 MB critic receives nothing for a long time while
 // the connection is busy, and a per-request test restarted it (seen on the live site, 2026-11-22).
-// sizes.json (tests/make_sizes.py) lists the bytes of every file under env/, models/ and vendor/ for the totals.
+// sizes.json (tests/make_sizes.py) gives [bytes, bytes on the wire] of every file under env/, models/ and vendor/: GitHub
+// Pages sends most files gzip-compressed, and the browser hands over the decompressed bytes. The wasm runtimes and the
+// meshes shrink about 4x while the weights do not, so the progress counts wire bytes (each file's bytes times its ratio)
+// and the time left is not underestimated while the runtimes arrive.
 const STALL_TICKS = 20, TRIES = 4;
 const ROOT = new URL('../', import.meta.url);
 const ahead = new Map();          // URL -> promise of its bytes, requested ahead of use and handed out once
@@ -48,7 +51,7 @@ function watchdog(on) {
   if (on && !watch) { idle = 0; watch = setInterval(() => { if (++idle >= STALL_TICKS) { idle = 0; for (const ac of running) ac.abort(); } }, 1000); }
   if (!on && watch && running.size === 0) { clearInterval(watch); watch = 0; }
 }
-const sizeOf = u => sizes[String(u).slice(ROOT.href.length)] || 0;
+const sizeOf = u => { const v = sizes[String(u).slice(ROOT.href.length)]; return Array.isArray(v) ? v : [v || 0, v || 0]; };
 function progress(msg) { bar.stage = msg; report(true); }
 function report(force) {
   const now = performance.now();
@@ -76,8 +79,10 @@ function report(force) {
 async function download(url, quiet) {
   if (!quiet) {
     if (bar.open === 0) Object.assign(bar, { got: 0, total: 0, note: '', hist: [], label: bar.stage.replace(/…$/, '') });
-    bar.open++; bar.total += sizeOf(url);
+    bar.open++;
   }
+  const [raw, wire] = sizeOf(url), ratio = raw > 0 ? wire / raw : 1;
+  if (!quiet) bar.total += wire;
   try {
     for (let k = 1; ; k++) {
       const ac = new AbortController();
@@ -92,7 +97,7 @@ async function download(url, quiet) {
           const { done, value } = await reader.read();
           if (done) break;
           idle = 0; parts.push(value); got += value.length;
-          if (!quiet) { bar.got += value.length; report(false); }
+          if (!quiet) { bar.got += value.length * ratio; report(false); }
         }
         // one whole chunk is returned as is; callers view the bytes as Float32Array, so a view at an offset is copied
         if (parts.length === 1 && parts[0].byteOffset === 0 && parts[0].byteLength === parts[0].buffer.byteLength) return parts[0];
@@ -101,7 +106,7 @@ async function download(url, quiet) {
         for (const q of parts) { out.set(q, o); o += q.length; }
         return out;
       } catch (e) {
-        if (!quiet) bar.got -= got;
+        if (!quiet) bar.got -= got * ratio;
         if (e.final || k >= TRIES) throw e;
         if (!quiet) { bar.note = 'the connection stalled, the download was restarted'; report(true); }
       } finally {
@@ -129,10 +134,11 @@ async function init(name, autoplay) {
     fetchJSON(new URL('env_meta.json', envDir)), fetchJSON(new URL('demo.json', modelDir))]);
   sizes = sz; envMeta = em;
   // the start-up set, all requested now: the two WebAssembly runtimes, the meshes, the base policies and the critic
-  const assetDir = new URL(em.asset_dir || 'assets/', envDir), MJ_WASM = new URL('../vendor/mujoco/mujoco.wasm', import.meta.url);
+  // asset_suffix: the meshes are stored as <name>.bin on GitHub Pages, which compresses .bin but not .stl (9.0 -> 2.3 MB)
+  const assetDir = new URL(em.asset_dir || 'assets/', envDir), assetURL = n => new URL(n + (em.asset_suffix || ''), assetDir), MJ_WASM = new URL('../vendor/mujoco/mujoco.wasm', import.meta.url);
   const ORT_WASM = new URL('../vendor/ort/ort-wasm-simd-threaded.wasm', import.meta.url);
   progress('Downloading the simulator and models…');
-  [MJ_WASM, ORT_WASM, ...(em.assets || []).map(n => new URL(n, assetDir)),
+  [MJ_WASM, ORT_WASM, ...(em.assets || []).map(assetURL),
    ...dm.actors.flatMap(a => [a.propose, a.velocity]).filter(Boolean).map(f => new URL(f, modelDir)),
    new URL(dm.critic.score, modelDir), ...(dm.critic.ref_xy ? [new URL(dm.critic.ref_xy, modelDir)] : [])].forEach(prefetch);
   bar.stage = 'Preparing the simulation…';      // shown when the downloads are done
@@ -144,7 +150,7 @@ async function init(name, autoplay) {
   if (Env.prepare) await Env.prepare(mj, envDir, fetchBytes);      // e.g. mesh assets into the WASM file system
   let assets = null;                                                // mesh files the scene references by name
   if (envMeta.assets) {
-    const files = await Promise.all(envMeta.assets.map(n => fetchBytes(new URL(n, assetDir))));
+    const files = await Promise.all(envMeta.assets.map(n => fetchBytes(assetURL(n))));
     assets = Object.fromEntries(envMeta.assets.map((n, k) => [n, files[k]]));
   }
   EnvClass = Env;
