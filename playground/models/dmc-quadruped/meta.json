@@ -1,0 +1,446 @@
+{
+ "dataset": "quadruped",
+ "suite": "DMC (ExORL data)",
+ "training_seed": 3917,
+ "sd": 78,
+ "ad": 12,
+ "R": 10000,
+ "chunk_len": 8,
+ "history_len": 16,
+ "flow_steps": 10,
+ "action_clip": [
+  -1.0,
+  1.0
+ ],
+ "episode_limit": 1000,
+ "control_dt": 0.02,
+ "critic": {
+  "row": "m_psi (rule S DMC row): production critic, ExORL ridge readout on the frozen EMA psi",
+  "score": "Q = mass * mean_heads F(window16, chunk8 at query 256) . z,  z = M w",
+  "readout": "ridge_z: z = (G + lam I)^-1 Psi^T w / n,  G = Psi^T Psi / n,  lam = 1e-4 * max eig(G) (float64)",
+  "M": "baked into abi_score/abi_grad as a float32 [d, R] matrix; minimum-norm rank-T correction so that M w_task reproduces the paper's cached z of every paper task (see the report)",
+  "mass": 49.99999999999996,
+  "gamma": 0.98,
+  "d": 256,
+  "R": 10000,
+  "lam": 0.030048399612076095,
+  "H_score": 8,
+  "query": 256,
+  "heads": "mean of the phi predictor heads",
+  "note": "only argmax and gradient of Q are used"
+ },
+ "reference": {
+  "rule": "10k arrival states s' = obs[t+1] of the critic's readout reference (paper.Inference(episodes, training seed)), in the critic's order",
+  "labels": "per-task dm_control reward of the arrival state (relabel: set_state + set_control in a reset context, mj_forward, mj_fwdPosition, mj_sensorVel, mj_subtreeVel), float32",
+  "features": [
+   "torso_upright",
+   "torso_velocity_x",
+   "com_height"
+  ],
+  "features_file": "ref_features.bin (float64 [R, F], row-major)",
+  "features_dtype_note": "float64: the float32-rounded features change 5e3-6e3 labels by 1 float32 ulp per task, the float64 features reproduce every shipped label bit for bit",
+  "feature_ranges": {
+   "torso_upright": {
+    "min": -0.9999998737617599,
+    "p1": -0.9994185154350648,
+    "p50": -0.8664981917044404,
+    "p99": 0.9905633637610404,
+    "max": 0.999894710767921
+   },
+   "torso_velocity_x": {
+    "min": -3.9549981145075743,
+    "p1": -2.1377658701359823,
+    "p50": -0.010178250918582502,
+    "p99": 2.0885930327616866,
+    "max": 3.763057705533157
+   },
+   "com_height": {
+    "min": 0.20140938069914582,
+    "p1": 0.22452548578927026,
+    "p50": 0.3463971510873009,
+    "p99": 1.1319430841642426,
+    "max": 1.6882524911445402
+   }
+  }
+ },
+ "history_rule": {
+  "contents": "raw observations (flatten_obs, float32), oldest first, current observation LAST",
+  "deque": "maxlen 16; [obs_after_reset] at reset; append the new observation after every env.step",
+  "window": "last min(len,16) observations right-aligned, zero rows on the left; valid = 1 on filled rows"
+ },
+ "noise": {
+  "paper": "torch.Generator(device).manual_seed(reset + 17001), torch.randn((N, 8, ad)) per replan (cuda in the paper)",
+  "qgf_bfn4u_unguided": "second generator manual_seed(reset + 27001), torch.randn((1, 8, ad)) per replan",
+  "demo": "any standard normal stream; the browser reproduces the distribution, not the paper's streams"
+ },
+ "sampler": {
+  "time_grid": [
+   0.0,
+   0.1,
+   0.2,
+   0.3,
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.8,
+   0.9
+  ],
+  "update": "x <- x + v(s, x, t_i) / 10",
+  "output": "clip(x, -1, 1)"
+ },
+ "protocols": {
+  "base": {
+   "N": 1,
+   "H_exec": 1
+  },
+  "bfn16_hexec1": {
+   "N": 16,
+   "H_exec": 1,
+   "select": "argmax Q"
+  },
+  "qgf_bfn4u_hexec1": {
+   "guided": 4,
+   "unguided": 1,
+   "H_exec": 1,
+   "select": "argmax Q over 5 (paper headline mode)"
+  },
+  "qgf_hexec1": {
+   "guided": 1,
+   "H_exec": 1
+  }
+ },
+ "qgf": {
+  "keep_dct": 3,
+  "gripper_dims": [],
+  "step": "tau * sqrt(8 * ad) * P g / max(||P g||_F, 1e-12) at the clipped Euler endpoint"
+ },
+ "tasks": [
+  {
+   "id": "stand",
+   "family": "stand",
+   "params": {},
+   "labels": "w_stand.bin",
+   "label_nonzero": 10000,
+   "label_mean": 0.23047856986522675,
+   "qgf_tau": {
+    "qgf_n1": 0.3,
+    "qgf_bfn4u": 0.3
+   }
+  },
+  {
+   "id": "walk",
+   "family": "move",
+   "params": {
+    "speed": 0.5
+   },
+   "labels": "w_walk.bin",
+   "label_nonzero": 7974,
+   "label_mean": 0.11157803982496262,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.03
+   }
+  },
+  {
+   "id": "run",
+   "family": "move",
+   "params": {
+    "speed": 5.0
+   },
+   "labels": "w_run.bin",
+   "label_nonzero": 10000,
+   "label_mean": 0.11430705338716507,
+   "qgf_tau": {
+    "qgf_n1": 0.1,
+    "qgf_bfn4u": 0.1
+   }
+  },
+  {
+   "id": "jump",
+   "family": "jump",
+   "params": {
+    "height": 1.0
+   },
+   "labels": "w_jump.bin",
+   "label_nonzero": 10000,
+   "label_mean": 0.18996959924697876,
+   "qgf_tau": {
+    "qgf_n1": 0.3,
+    "qgf_bfn4u": 0.3
+   }
+  }
+ ],
+ "knobs": [
+  {
+   "id": "speed",
+   "family": "move",
+   "param": "speed",
+   "name": "target speed",
+   "unit": "m/s",
+   "min": 0.25,
+   "max": 5.0,
+   "step": 0.25,
+   "note": "forward velocity of the torso in its own frame (velocimeter x)"
+  },
+  {
+   "id": "height",
+   "family": "jump",
+   "param": "height",
+   "name": "target height",
+   "unit": "m",
+   "min": 0.5,
+   "max": 1.5,
+   "step": 0.05,
+   "note": "height of the centre of mass"
+  }
+ ],
+ "files": {
+  "abi_grad.onnx": {
+   "bytes": 27000013,
+   "sha256": "85df3924df57c2969c716a8073737260fc467cbfbf5c0ce72794d1b8d7b12ad7",
+   "opset": 18,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      78
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      12
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      10000
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "grad",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      12
+     ]
+    }
+   ]
+  },
+  "abi_score.onnx": {
+   "bytes": 27020315,
+   "sha256": "3445b6e8f3d31d73e36cab8c508cd4b2ec7506a0f7d53e66f72cf37154f7b5d2",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      78
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      12
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      10000
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "scores",
+     "dtype": "float32",
+     "shape": [
+      "N"
+     ]
+    }
+   ]
+  },
+  "flow_bc_propose.onnx": {
+   "bytes": 579629,
+   "sha256": "a78ce2f8128399dd6d2e5c9a286e4668d58d64f8a411bb5d4fd188acbb7d5a37",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      78
+     ]
+    },
+    {
+     "name": "noise",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      12
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "actions",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      12
+     ]
+    }
+   ]
+  },
+  "flow_bc_velocity.onnx": {
+   "bytes": 550766,
+   "sha256": "9c88540e066aa7848f77751af44996812a38b0c9b8414e7866f19229f99097d2",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      78
+     ]
+    },
+    {
+     "name": "x_t",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      12
+     ]
+    },
+    {
+     "name": "t",
+     "dtype": "float32",
+     "shape": [
+      1
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "velocity",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      12
+     ]
+    }
+   ]
+  },
+  "ref_features.bin": {
+   "bytes": 240000,
+   "sha256": "59d2d1d8dacb549c46e4569936d554b18c3e45ddeed388cdf999730b8c1ab561"
+  },
+  "w_jump.bin": {
+   "bytes": 40000,
+   "sha256": "75267139606212f3b04c9622f8aa54d195b4805923807af8f3b4c89c32b96e9c"
+  },
+  "w_run.bin": {
+   "bytes": 40000,
+   "sha256": "2ab5ddf5a908b14b014811ea735cbc42a2070e99a07bfa4e26b6614e058cc037"
+  },
+  "w_stand.bin": {
+   "bytes": 40000,
+   "sha256": "6af3fd2d7f37ff37bfd100c672082322fee60dabba27009e04aa22d5e40958c0"
+  },
+  "w_walk.bin": {
+   "bytes": 40000,
+   "sha256": "7c2088f4e53dda86d99ac6f474f820742b2d7575df18e4d80eae3371c7d4448b"
+  }
+ },
+ "paper": {
+  "note": "per-task mean episode return of the seed-3917 cells (20 resets each, CUDA); Tab. 1 = mean over seeds 3917/3502/8948",
+  "tab1_mean_3_seeds_hexec1": {
+   "flow_bc": 50.6,
+   "bfn16": 690.5,
+   "qgf": 728.6,
+   "qgf_bfn4u": 742.4
+  },
+  "seed_3917": {
+   "flow_bc": {
+    "mean": 53.16351143470863,
+    "per_task": {
+     "stand": 83.66160928445143,
+     "walk": 29.574574324574776,
+     "run": 31.10531859825746,
+     "jump": 68.31254353155082
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_hexec1/base/test/quadruped__s3917__h1__n1/result.json"
+   },
+   "bfn16": {
+    "mean": 695.6641104306891,
+    "per_task": {
+     "stand": 932.1766872962329,
+     "walk": 585.330407721724,
+     "run": 478.3925426958228,
+     "jump": 786.7568040089767
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_hexec1/abi/test/quadruped__s3917__h1__n16/result.json"
+   },
+   "qgf": {
+    "mean": 735.0330802914125,
+    "per_task": {
+     "stand": 970.8608565835171,
+     "walk": 673.9857662317762,
+     "run": 487.98622137611085,
+     "jump": 807.2994769742457
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_qgf/qgf/r40000/test/quadruped__s3917__h1/result.json"
+   },
+   "qgf_bfn4u": {
+    "mean": 743.2133510342485,
+    "per_task": {
+     "stand": 974.5730661805131,
+     "walk": 707.1667732667253,
+     "run": 491.147333288562,
+     "jump": 799.9662314011939
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_qgf/qgf_bfn4u/r40000/test/quadruped__s3917__h1/result.json"
+   }
+  }
+ }
+}

@@ -1,0 +1,932 @@
+{
+ "env": "antmaze-medium-navigate",
+ "dataset": "antmaze-medium-navigate-v0",
+ "training_seed": 3917,
+ "default": "tdjepa",
+ "paths": "file paths are relative to models/<env>/, as for the critic files",
+ "policies": [
+  {
+   "id": "tdjepa",
+   "label": "TD-JEPA actor",
+   "short": "TD-JEPA actor",
+   "note": "The trained actor of TD-JEPA, a zero-shot RL method. It infers the task from the goal by itself.",
+   "onnx": "baselines/tdjepa_actor.onnx",
+   "sd": 29,
+   "ad": 8,
+   "z_dim": 50,
+   "io": {
+    "inputs": {
+     "obs": [
+      "B",
+      29
+     ],
+     "z": [
+      "B",
+      50
+     ],
+     "noise": [
+      "B",
+      8
+     ]
+    },
+    "outputs": {
+     "action": [
+      "B",
+      8
+     ]
+    },
+    "normalisation": "none needed: the observation normaliser and pixel encoder of this model are identities; the graph takes the raw observation"
+   },
+   "deterministic": false,
+   "noise": {
+    "input": "noise",
+    "dist": "N(0, I) of size ad",
+    "per_call": "one fresh draw per act() call, i.e. per environment step",
+    "default_seed": 1,
+    "official": "model.act(obs, z, mean=True) ignores mean and draws torch.randn((1, ad)) inside the noise-conditioned actor at every call; the paper's evaluator seeds the global torch generator with reset + 17001 once per episode"
+   },
+   "action": "tanh output in (-1, 1); the official loop applies no further clipping (the environment clips to its control range)",
+   "H_exec": 1,
+   "replan": "every environment step (single-step actor)",
+   "inference": {
+    "B": "baselines/tdjepa_B.bin",
+    "M": 10000,
+    "dim": 50,
+    "B_def": "psi(s') of the arrival observation: TD-JEPA's reward-inference features, normalised to ||psi|| = sqrt(d)",
+    "samples": "the fixed 10k reference of the paper's readouts: transitions drawn uniformly with replacement over the 1000 training episodes with numpy default_rng(3917); one-step FB and TD-JEPA use the same 10k transitions",
+    "label_points": {
+     "file": "baselines/infer_xy.bin",
+     "dim": 2,
+     "what": "torso xy (qpos[0:2]) of the arrival state s' of each inference transition"
+    },
+    "label_rule": {
+     "kind": "ball",
+     "radius": 0.5,
+     "inclusive": true,
+     "hit": 1,
+     "miss": 0,
+     "note": "success test at s': ||xy - goal|| <= 0.5 (OGBench reward -1/0, shifted by +1); identical to ABI's rule; reproduces the cached labels of all 5 tasks exactly"
+    },
+    "z_rule": {
+     "kind": "lstsq_project",
+     "weighting": "none: ordinary least squares, ridge 0",
+     "shift": "+1 on the OGBench reward (labels 0/1)",
+     "normalisation": "z = sqrt(d) x / max(||x||, 1e-12) (project_z)",
+     "sample_count": 10000,
+     "formula": "x = argmin_x ||Psi x - r||_2 (torch.linalg.lstsq of the released reward_inference); browser: Cholesky solve of the normal equations in float64",
+     "no_positive": "z = 0 (as project_z of a zero vector); reported as valid = false"
+    }
+   },
+   "model": {
+    "code": "TD-JEPA released code, unmodified",
+    "training_seed": 3917,
+    "updates": 1000000,
+    "config": {
+     "lr_psi": 0.0001,
+     "lambda_psi": 0.1,
+     "grid_index": 0,
+     "selection": "released per-domain grid, selected by the final in-training success mean (prespecified rule, first in launcher order on ties)"
+    },
+    "actor_std": 0.2
+   },
+   "official_seed3917": [
+    {
+     "label": "reproduced TD-JEPA actor alone (T-a)",
+     "protocol": "actor every step (H_exec 1), z from the 10k reference, test resets 40000-40019, 20 episodes per task",
+     "mean": 79.0,
+     "per_task": {
+      "task1": 75.0,
+      "task2": 100.0,
+      "task3": 50.0,
+      "task4": 70.0,
+      "task5": 100.0
+     },
+     "episodes": 100,
+     "source": "T-a/alone/test/antmaze-medium-navigate-v0__s3917__h1/result.json",
+     "source_sha256": "8bc69e9f16a85662e43bccc38ed2c46079cb13fb2cd53be7a22a0a78757fccba"
+    },
+    {
+     "label": "reproduced TD-JEPA actor alone through the actor-adaptation loop (T-c alone; the paper's \"Unguided actor\" of the external-actor table)",
+     "protocol": "same actor and z, test resets 40000-40019, 20 episodes per task",
+     "mean": 76.0,
+     "per_task": {
+      "task1": 90.0,
+      "task2": 90.0,
+      "task3": 20.0,
+      "task4": 80.0,
+      "task5": 100.0
+     },
+     "episodes": 100,
+     "source": "T-c/alone/test/antmaze-medium-navigate-v0__s3917__h1/result.json",
+     "source_sha256": "a1f582167cdae527c0ac2d7c9908e98cd17e1ceb84e3d5314dbe09f47034d104"
+    },
+    {
+     "label": "released code's own in-training evaluation at the final 1M checkpoint",
+     "protocol": "upstream evaluator: 10 episodes per task, a fresh random 10k inference batch per task, sequential environment seeds",
+     "mean": 72.0,
+     "per_task": {
+      "task1": 70.0,
+      "task2": 80.0,
+      "task3": 40.0,
+      "task4": 70.0,
+      "task5": 100.0
+     },
+     "episodes": 50,
+     "source": "G/antmaze-medium-navigate-v0__s3917__g0/_COMPLETE.json",
+     "source_sha256": "a6b6278026c08b067c9946a11901369a68ffcdfa71723d591362a8982a71e3df"
+    }
+   ]
+  },
+  {
+   "id": "osfb",
+   "label": "One-step FB actor",
+   "short": "One-step FB actor",
+   "note": "The trained actor of one-step FB, a zero-shot RL method. It infers the task from the goal by itself.",
+   "onnx": "baselines/osfb_actor.onnx",
+   "sd": 29,
+   "ad": 8,
+   "z_dim": 128,
+   "io": {
+    "inputs": {
+     "obs": [
+      "B",
+      29
+     ],
+     "z": [
+      "B",
+      128
+     ]
+    },
+    "outputs": {
+     "action": [
+      "B",
+      8
+     ]
+    },
+    "normalisation": "none: the actor reads the raw observation concatenated with z"
+   },
+   "deterministic": true,
+   "action": "mode of the tanh-squashed Gaussian, tanh(mean), clipped to [-1, 1] (the evaluator's own clip); log std is a constant 0, so the mode is the policy's action",
+   "H_exec": 1,
+   "replan": "every environment step (single-step actor)",
+   "inference": {
+    "B": "baselines/osfb_B.bin",
+    "M": 10000,
+    "dim": 128,
+    "B_def": "backward representation B(s', a') of the arrival state and its departing action, clipped to +-(1 - 1e-5)",
+    "samples": "the fixed 10k reference of the paper's readouts: transitions drawn uniformly with replacement over the 1000 training episodes with numpy default_rng(3917); one-step FB and TD-JEPA use the same 10k transitions",
+    "label_points": {
+     "file": "baselines/infer_xy.bin",
+     "dim": 2,
+     "what": "torso xy (qpos[0:2]) of the arrival state s' of each inference transition"
+    },
+    "label_rule": {
+     "kind": "ball",
+     "radius": 0.5,
+     "inclusive": true,
+     "hit": 1,
+     "miss": 0,
+     "note": "success test at s': ||xy - goal|| <= 0.5 (OGBench reward -1/0, shifted by +1); identical to ABI's rule; reproduces the cached labels of all 5 tasks exactly"
+    },
+    "z_rule": {
+     "kind": "softmax_reward_mean",
+     "temperature": 10.0,
+     "weighting": "w = softmax(T r) over the M samples (author infer_latent)",
+     "shift": "+1 on the OGBench reward (labels 0/1)",
+     "normalisation": "z = sqrt(d) m / ||m|| (normalize_latent)",
+     "sample_count": 10000,
+     "formula": "m = mean_k (w_k r_k B_k); with 0/1 labels z is sqrt(d) times the normalised sum of B over the positive samples",
+     "no_positive": "undefined in the original (0 / 0); here z = 0 and valid = false"
+    }
+   },
+   "model": {
+    "code": "one-step FB authors' agent code, unmodified",
+    "training_seed": 3917,
+    "updates": 1000000,
+    "config": {
+     "latent_dim": 128,
+     "alpha": 0.03,
+     "orthonorm_coeff": 0.0,
+     "reward_temperature": 10.0,
+     "discount": 0.99,
+     "q_agg": "min",
+     "actor_hidden_dims": [
+      512,
+      512,
+      512,
+      512
+     ],
+     "activation": "gelu",
+     "tanh_squash": true,
+     "const_std": true
+    }
+   },
+   "official_seed3917": [
+    {
+     "label": "one-step FB actor alone (the paper's one-step FB column and \"Unguided actor\")",
+     "protocol": "mode of the actor every step (H_exec 1), z from the 10k reference, test resets 40000-40019, 20 episodes per task",
+     "mean": 45.0,
+     "per_task": {
+      "task1": 45.0,
+      "task2": 5.0,
+      "task3": 65.0,
+      "task4": 25.0,
+      "task5": 85.0
+     },
+     "episodes": 100,
+     "source": "osfb/alone/test/antmaze-medium-navigate-v0__s3917/result.json",
+     "source_sha256": "24045c0279059052987b6c4df916f55283b7cfef5ccca6fa2f7015d29d23dafc"
+    },
+    {
+     "label": "one-step FB native arm of the earlier benchmark block (superseded in the paper)",
+     "protocol": "same actor and 10k reference, resets 20000-20009, 10 episodes per task",
+     "mean": 26.0,
+     "per_task": {
+      "task1": 0.0,
+      "task2": 20.0,
+      "task3": 30.0,
+      "task4": 30.0,
+      "task5": 50.0
+     },
+     "episodes": 50,
+     "source": "paper/eval/antmaze-medium-navigate-v0__one_step_fb_native__s3917/summary.json",
+     "source_sha256": "c67f9cd71d60387c6d0302795ea3e66372ec37ad54d536235dc979481694594b"
+    }
+   ]
+  }
+ ],
+ "files": {
+  "infer_xy.bin": {
+   "bytes": 80000,
+   "sha256": "1f8dc6d0c9d3a614e0faa96bd4192d693e00a9dbd01c1c669ddec64d0dda0b74"
+  },
+  "osfb_B.bin": {
+   "bytes": 5120000,
+   "sha256": "a0dc5b0ff4b93db10bfc93b2a9cb90216514f64c9f2c178d695a0747231c2a90"
+  },
+  "osfb_actor.onnx": {
+   "bytes": 3494162,
+   "sha256": "9c44dd33815d2025ef2c89908951a4e30173a197abb138c6fc7e42da6357480e"
+  },
+  "tdjepa_B.bin": {
+   "bytes": 2000000,
+   "sha256": "399de0649a93d87d5ae5a50bc4cd410abaf7af2441370c462b5c0187e2bb6aa8"
+  },
+  "tdjepa_actor.onnx": {
+   "bytes": 3436135,
+   "sha256": "b6869bf8bbcb4b09e2a004b6bb810c0005f28f050412b9fcb2f8fd69102844ef"
+  }
+ },
+ "verification": {
+  "report": "REPORT_baselines_antmaze-medium-navigate.md",
+  "onnx_vs_original_max_abs": {
+   "tdjepa": {
+    "dataset_states": {
+     "n": 2000,
+     "max_abs": 3.3080577850341797e-06
+    },
+    "recorded_episodes": {
+     "n_states": 1909,
+     "max_abs": 1.8328428268432617e-06,
+     "episodes": [
+      {
+       "task": "antmaze-medium-navigate-singletask-task1-v0",
+       "reset": 40000,
+       "success": true,
+       "steps": 418,
+       "wall_s": 0.4
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task2-v0",
+       "reset": 40000,
+       "success": true,
+       "steps": 410,
+       "wall_s": 0.3
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task3-v0",
+       "reset": 40000,
+       "success": true,
+       "steps": 603,
+       "wall_s": 0.5
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task4-v0",
+       "reset": 40000,
+       "success": true,
+       "steps": 283,
+       "wall_s": 0.2
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task5-v0",
+       "reset": 40000,
+       "success": true,
+       "steps": 195,
+       "wall_s": 0.2
+      }
+     ]
+    }
+   },
+   "osfb": {
+    "dataset_states": {
+     "n": 2000,
+     "max_abs": 5.0961971282958984e-06,
+     "torch_module_max_abs": 5.679205060005188e-06
+    },
+    "recorded_episodes": {
+     "n_states": 4878,
+     "max_abs": 1.3053417205810547e-05,
+     "episodes": [
+      {
+       "task": "antmaze-medium-navigate-singletask-task1-v0",
+       "reset": 40000,
+       "success": true,
+       "steps": 878,
+       "wall_s": 17.7
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task2-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 1000,
+       "wall_s": 19.4
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task3-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 1000,
+       "wall_s": 19.9
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task4-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 1000,
+       "wall_s": 19.6
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task5-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 1000,
+       "wall_s": 21.0
+      }
+     ]
+    }
+   }
+  },
+  "z_python_vs_official": {
+   "tdjepa": [
+    {
+     "task": "antmaze-medium-navigate-singletask-task1-v0",
+     "positives": 91,
+     "cos_np64_vs_official": 0.9999999613722936,
+     "maxabs_np64_vs_official": 0.0007871839556572446,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999614020666,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.0007860958576202393,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 3.38441628044972e-06
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task2-v0",
+     "positives": 78,
+     "cos_np64_vs_official": 0.9999999396169352,
+     "maxabs_np64_vs_official": 0.0007449576436251992,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999396355667,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.0007447600364685059,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 6.282590385708886e-07
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task3-v0",
+     "positives": 76,
+     "cos_np64_vs_official": 0.9999999326651725,
+     "maxabs_np64_vs_official": 0.0008143006816259124,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999326516463,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.0008145570755004883,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 8.484570102051947e-07
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task4-v0",
+     "positives": 93,
+     "cos_np64_vs_official": 0.9999999613665806,
+     "maxabs_np64_vs_official": 0.0007244089861095093,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999613549032,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.0007246583700180054,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 9.710923045691544e-07
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task5-v0",
+     "positives": 77,
+     "cos_np64_vs_official": 0.9999999096472426,
+     "maxabs_np64_vs_official": 0.0012883988056290319,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999096594185,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.0012879371643066406,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 1.1201966503282534e-06
+    }
+   ],
+   "osfb": [
+    {
+     "task": "antmaze-medium-navigate-singletask-task1-v0",
+     "positives": 91,
+     "cos_np64_vs_official": 0.9999999132741468,
+     "maxabs_np64_vs_official": 0.001188685098018727,
+     "cos_cpu_author_fn_vs_official": 0.9999999132824647,
+     "maxabs_cpu_author_fn_vs_official": 0.0011886060237884521,
+     "maxabs_np64_vs_cpu_author_fn": 3.296801902585855e-07
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task2-v0",
+     "positives": 78,
+     "cos_np64_vs_official": 0.9999998727342375,
+     "maxabs_np64_vs_official": 0.0013111176876330344,
+     "cos_cpu_author_fn_vs_official": 0.9999998727287381,
+     "maxabs_cpu_author_fn_vs_official": 0.0013110637664794922,
+     "maxabs_np64_vs_cpu_author_fn": 3.2808785510596294e-07
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task3-v0",
+     "positives": 76,
+     "cos_np64_vs_official": 0.9999999572407144,
+     "maxabs_np64_vs_official": 0.0008543780772645171,
+     "cos_cpu_author_fn_vs_official": 0.999999957244805,
+     "maxabs_cpu_author_fn_vs_official": 0.0008540153503417969,
+     "maxabs_np64_vs_cpu_author_fn": 3.6272692272021345e-07
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task4-v0",
+     "positives": 93,
+     "cos_np64_vs_official": 0.9999999183634121,
+     "maxabs_np64_vs_official": 0.0016036751245201986,
+     "cos_cpu_author_fn_vs_official": 0.9999999183567628,
+     "maxabs_cpu_author_fn_vs_official": 0.0016036629676818848,
+     "maxabs_np64_vs_cpu_author_fn": 3.47204257344913e-07
+    },
+    {
+     "task": "antmaze-medium-navigate-singletask-task5-v0",
+     "positives": 77,
+     "cos_np64_vs_official": 0.9999998750156021,
+     "maxabs_np64_vs_official": 0.0014295107250483219,
+     "cos_cpu_author_fn_vs_official": 0.9999998750165423,
+     "maxabs_cpu_author_fn_vs_official": 0.0014295876026153564,
+     "maxabs_np64_vs_cpu_author_fn": 2.3853598740686266e-07
+    }
+   ]
+  },
+  "official_z_recomputed_on_a100": {
+   "tdjepa": {
+    "tf32_False": {
+     "max_abs_vs_official": 0.0012884736061096191,
+     "bitwise_equal": false
+    },
+    "tf32_True": {
+     "max_abs_vs_official": 0.0,
+     "bitwise_equal": true
+    }
+   },
+   "osfb": {
+    "jax_gpu_precision_default": {
+     "max_abs_vs_official": 0.0,
+     "bitwise_equal": true
+    },
+    "jax_gpu_precision_highest": {
+     "max_abs_vs_official": 0.0016036629676818848,
+     "bitwise_equal": false
+    }
+   }
+  },
+  "js": {
+   "env": "antmaze-medium-navigate",
+   "runtime": "node v24.18.0, onnxruntime-web WASM, 1 thread",
+   "policies": {
+    "tdjepa": {
+     "load_ms": 323.50964400000004,
+     "set_goal_ms": 1.505101999999988,
+     "act_ms": 0.21038221,
+     "tasks": [
+      {
+       "task": "antmaze-medium-navigate-singletask-task1-v0",
+       "goal": [
+        20,
+        20
+       ],
+       "positives_js": 91,
+       "positives_official": 91,
+       "valid": true,
+       "cos": 0.9999999613721436,
+       "max_abs": 0.000787198543548584
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task2-v0",
+       "goal": [
+        20,
+        0
+       ],
+       "positives_js": 78,
+       "positives_official": 78,
+       "valid": true,
+       "cos": 0.9999999396182275,
+       "max_abs": 0.0007449686527252197
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task3-v0",
+       "goal": [
+        4,
+        12
+       ],
+       "positives_js": 76,
+       "positives_official": 76,
+       "valid": true,
+       "cos": 0.9999999326646134,
+       "max_abs": 0.0008143186569213867
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task4-v0",
+       "goal": [
+        0,
+        20
+       ],
+       "positives_js": 93,
+       "positives_official": 93,
+       "valid": true,
+       "cos": 0.999999961366082,
+       "max_abs": 0.00072440505027771
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task5-v0",
+       "goal": [
+        0,
+        0
+       ],
+       "positives_js": 77,
+       "positives_official": 77,
+       "valid": true,
+       "cos": 0.9999999096481463,
+       "max_abs": 0.0012884140014648438
+      }
+     ],
+     "recorded_states": {
+      "n": 64,
+      "max_abs_vs_original": 1.1324882507324219e-06
+     }
+    },
+    "osfb": {
+     "load_ms": 35.53069999999991,
+     "set_goal_ms": 1.8606121999999687,
+     "act_ms": 0.19973241399999994,
+     "tasks": [
+      {
+       "task": "antmaze-medium-navigate-singletask-task1-v0",
+       "goal": [
+        20,
+        20
+       ],
+       "positives_js": 91,
+       "positives_official": 91,
+       "valid": true,
+       "cos": 0.9999999132753198,
+       "max_abs": 0.0011886954307556152
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task2-v0",
+       "goal": [
+        20,
+        0
+       ],
+       "positives_js": 78,
+       "positives_official": 78,
+       "valid": true,
+       "cos": 0.9999998727358329,
+       "max_abs": 0.0013110637664794922
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task3-v0",
+       "goal": [
+        4,
+        12
+       ],
+       "positives_js": 76,
+       "positives_official": 76,
+       "valid": true,
+       "cos": 0.9999999572400422,
+       "max_abs": 0.0008544921875
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task4-v0",
+       "goal": [
+        0,
+        20
+       ],
+       "positives_js": 93,
+       "positives_official": 93,
+       "valid": true,
+       "cos": 0.9999999183623031,
+       "max_abs": 0.0016036629676818848
+      },
+      {
+       "task": "antmaze-medium-navigate-singletask-task5-v0",
+       "goal": [
+        0,
+        0
+       ],
+       "positives_js": 77,
+       "positives_official": 77,
+       "valid": true,
+       "cos": 0.9999998750140953,
+       "max_abs": 0.0014294981956481934
+      }
+     ],
+     "recorded_states": {
+      "n": 64,
+      "max_abs_vs_original": 6.020069122314453e-06
+     }
+    }
+   }
+  },
+  "closed_loop": {
+   "env": "antmaze-medium-navigate",
+   "note": "success % (episodes); se = binomial standard error of the mean over episodes",
+   "policies": {
+    "tdjepa": {
+     "js": {
+      "code": "demo/js/baselines.js + the demo environment, MuJoCo 3.17.0 WASM, onnxruntime-web WASM, node",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 75.0,
+       "se": 4.3,
+       "per_task": {
+        "task1": 100.0,
+        "task2": 80.0,
+        "task3": 35.0,
+        "task4": 60.0,
+        "task5": 100.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 74.4,
+       "se": 2.0,
+       "per_task": {
+        "task1": 88.0,
+        "task2": 89.0,
+        "task3": 32.0,
+        "task4": 66.0,
+        "task5": 97.0
+       }
+      },
+      "rerun_identical": true
+     },
+     "official_env_official_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the official latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 76.0,
+       "se": 4.3,
+       "per_task": {
+        "task1": 80.0,
+        "task2": 80.0,
+        "task3": 35.0,
+        "task4": 85.0,
+        "task5": 100.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 74.4,
+       "se": 2.0,
+       "per_task": {
+        "task1": 84.0,
+        "task2": 87.0,
+        "task3": 27.0,
+        "task4": 79.0,
+        "task5": 95.0
+       }
+      }
+     },
+     "official_env_shipped_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the shipped latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 75.0,
+       "se": 4.3,
+       "per_task": {
+        "task1": 85.0,
+        "task2": 80.0,
+        "task3": 35.0,
+        "task4": 75.0,
+        "task5": 100.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 73.6,
+       "se": 2.0,
+       "per_task": {
+        "task1": 80.0,
+        "task2": 87.0,
+        "task3": 33.0,
+        "task4": 70.0,
+        "task5": 98.0
+       }
+      }
+     },
+     "official_seed3917": [
+      {
+       "label": "reproduced TD-JEPA actor alone (T-a)",
+       "mean": 79.0,
+       "per_task": {
+        "task1": 75.0,
+        "task2": 100.0,
+        "task3": 50.0,
+        "task4": 70.0,
+        "task5": 100.0
+       },
+       "episodes": 100
+      },
+      {
+       "label": "reproduced TD-JEPA actor alone through the actor-adaptation loop (T-c alone; the paper's \"Unguided actor\" of the external-actor table)",
+       "mean": 76.0,
+       "per_task": {
+        "task1": 90.0,
+        "task2": 90.0,
+        "task3": 20.0,
+        "task4": 80.0,
+        "task5": 100.0
+       },
+       "episodes": 100
+      },
+      {
+       "label": "released code's own in-training evaluation at the final 1M checkpoint",
+       "mean": 72.0,
+       "per_task": {
+        "task1": 70.0,
+        "task2": 80.0,
+        "task3": 40.0,
+        "task4": 70.0,
+        "task5": 100.0
+       },
+       "episodes": 50
+      }
+     ]
+    },
+    "osfb": {
+     "js": {
+      "code": "demo/js/baselines.js + the demo environment, MuJoCo 3.17.0 WASM, onnxruntime-web WASM, node",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 36.0,
+       "se": 4.8,
+       "per_task": {
+        "task1": 50.0,
+        "task2": 15.0,
+        "task3": 40.0,
+        "task4": 15.0,
+        "task5": 60.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 38.6,
+       "se": 2.2,
+       "per_task": {
+        "task1": 41.0,
+        "task2": 11.0,
+        "task3": 50.0,
+        "task4": 19.0,
+        "task5": 72.0
+       }
+      },
+      "rerun_identical": true
+     },
+     "official_env_official_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the official latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 43.0,
+       "se": 5.0,
+       "per_task": {
+        "task1": 40.0,
+        "task2": 10.0,
+        "task3": 60.0,
+        "task4": 35.0,
+        "task5": 70.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 37.6,
+       "se": 2.2,
+       "per_task": {
+        "task1": 45.0,
+        "task2": 8.0,
+        "task3": 47.0,
+        "task4": 23.0,
+        "task5": 65.0
+       }
+      }
+     },
+     "official_env_shipped_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the shipped latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 45.0,
+       "se": 5.0,
+       "per_task": {
+        "task1": 45.0,
+        "task2": 5.0,
+        "task3": 60.0,
+        "task4": 40.0,
+        "task5": 75.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 41.4,
+       "se": 2.2,
+       "per_task": {
+        "task1": 46.0,
+        "task2": 8.0,
+        "task3": 57.0,
+        "task4": 21.0,
+        "task5": 75.0
+       }
+      }
+     },
+     "official_seed3917": [
+      {
+       "label": "one-step FB actor alone (the paper's one-step FB column and \"Unguided actor\")",
+       "mean": 45.0,
+       "per_task": {
+        "task1": 45.0,
+        "task2": 5.0,
+        "task3": 65.0,
+        "task4": 25.0,
+        "task5": 85.0
+       },
+       "episodes": 100
+      },
+      {
+       "label": "one-step FB native arm of the earlier benchmark block (superseded in the paper)",
+       "mean": 26.0,
+       "per_task": {
+        "task1": 0.0,
+        "task2": 20.0,
+        "task3": 30.0,
+        "task4": 30.0,
+        "task5": 50.0
+       },
+       "episodes": 50
+      }
+     ]
+    }
+   }
+  }
+ }
+}

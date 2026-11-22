@@ -1,0 +1,60 @@
+{
+ "sd": 78,
+ "ad": 12,
+ "chunk": 8,
+ "window": 16,
+ "flow_steps": 10,
+ "default_actor": "bc",
+ "actors": [
+  {
+   "id": "bc",
+   "label": "Flow BC",
+   "short": "Flow BC",
+   "propose": "flow_bc_propose.onnx",
+   "velocity": "flow_bc_velocity.onnx",
+   "note": "Behavior cloning of the offline data with a flow policy. It has no notion of the task."
+  }
+ ],
+ "critic": {
+  "score": "abi_score.onnx",
+  "grad": "abi_grad.onnx",
+  "R": 10000,
+  "labels": {
+   "stand": "w_stand.bin",
+   "walk": "w_walk.bin",
+   "run": "w_run.bin",
+   "jump": "w_jump.bin"
+  },
+  "features": "ref_features.bin",
+  "features_dtype": "float64",
+  "features_names": [
+   "torso_upright",
+   "torso_velocity_x",
+   "com_height"
+  ]
+ },
+ "reward": {
+  "kind": "dmc",
+  "rule": "labels(envMeta, features, task) and Env.reward() in js/envs/dmc.js"
+ },
+ "qgf": {
+  "keep_dct": 3
+ },
+ "footer": "",
+ "task_alpha": {
+  "qgf": [
+   0.3,
+   0.03,
+   0.1,
+   0.3
+  ],
+  "qgf_bfn": [
+   0.3,
+   0.03,
+   0.1,
+   0.3
+  ]
+ },
+ "knob_alpha_rule": "a knob value between presets uses the QGF tau of the nearest preset of the same family (demo choice)",
+ "env": "dmc-quadruped"
+}

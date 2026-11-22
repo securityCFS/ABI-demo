@@ -1,0 +1,421 @@
+{
+ "dataset": "cheetah",
+ "suite": "DMC (ExORL data)",
+ "training_seed": 3917,
+ "sd": 17,
+ "ad": 6,
+ "R": 10000,
+ "chunk_len": 8,
+ "history_len": 16,
+ "flow_steps": 10,
+ "action_clip": [
+  -1.0,
+  1.0
+ ],
+ "episode_limit": 1000,
+ "control_dt": 0.01,
+ "critic": {
+  "row": "m_psi (rule S DMC row): production critic, ExORL ridge readout on the frozen EMA psi",
+  "score": "Q = mass * mean_heads F(window16, chunk8 at query 256) . z,  z = M w",
+  "readout": "ridge_z: z = (G + lam I)^-1 Psi^T w / n,  G = Psi^T Psi / n,  lam = 1e-4 * max eig(G) (float64)",
+  "M": "baked into abi_score/abi_grad as a float32 [d, R] matrix; minimum-norm rank-T correction so that M w_task reproduces the paper's cached z of every paper task (see the report)",
+  "mass": 49.99999999999996,
+  "gamma": 0.98,
+  "d": 256,
+  "R": 10000,
+  "lam": 0.021283440685115135,
+  "H_score": 8,
+  "query": 256,
+  "heads": "mean of the phi predictor heads",
+  "note": "only argmax and gradient of Q are used"
+ },
+ "reference": {
+  "rule": "10k arrival states s' = obs[t+1] of the critic's readout reference (paper.Inference(episodes, training seed)), in the critic's order",
+  "labels": "per-task dm_control reward of the arrival state (relabel: set_state + set_control in a reset context, mj_forward, mj_fwdPosition, mj_sensorVel, mj_subtreeVel), float32",
+  "features": [
+   "torso_subtreelinvel_x"
+  ],
+  "features_file": "ref_features.bin (float64 [R, F], row-major)",
+  "features_dtype_note": "float64: the float32-rounded features change 5e3-6e3 labels by 1 float32 ulp per task, the float64 features reproduce every shipped label bit for bit",
+  "feature_ranges": {
+   "torso_subtreelinvel_x": {
+    "min": -5.0231306610109785,
+    "p1": -3.1085000623663888,
+    "p50": -0.009535718832387019,
+    "p99": 3.158572844260177,
+    "max": 5.252898099376874
+   }
+  }
+ },
+ "history_rule": {
+  "contents": "raw observations (flatten_obs, float32), oldest first, current observation LAST",
+  "deque": "maxlen 16; [obs_after_reset] at reset; append the new observation after every env.step",
+  "window": "last min(len,16) observations right-aligned, zero rows on the left; valid = 1 on filled rows"
+ },
+ "noise": {
+  "paper": "torch.Generator(device).manual_seed(reset + 17001), torch.randn((N, 8, ad)) per replan (cuda in the paper)",
+  "qgf_bfn4u_unguided": "second generator manual_seed(reset + 27001), torch.randn((1, 8, ad)) per replan",
+  "demo": "any standard normal stream; the browser reproduces the distribution, not the paper's streams"
+ },
+ "sampler": {
+  "time_grid": [
+   0.0,
+   0.1,
+   0.2,
+   0.3,
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.8,
+   0.9
+  ],
+  "update": "x <- x + v(s, x, t_i) / 10",
+  "output": "clip(x, -1, 1)"
+ },
+ "protocols": {
+  "base": {
+   "N": 1,
+   "H_exec": 1
+  },
+  "bfn16_hexec1": {
+   "N": 16,
+   "H_exec": 1,
+   "select": "argmax Q"
+  },
+  "qgf_bfn4u_hexec1": {
+   "guided": 4,
+   "unguided": 1,
+   "H_exec": 1,
+   "select": "argmax Q over 5 (paper headline mode)"
+  },
+  "qgf_hexec1": {
+   "guided": 1,
+   "H_exec": 1
+  }
+ },
+ "qgf": {
+  "keep_dct": 3,
+  "gripper_dims": [],
+  "step": "tau * sqrt(8 * ad) * P g / max(||P g||_F, 1e-12) at the clipped Euler endpoint"
+ },
+ "tasks": [
+  {
+   "id": "walk",
+   "family": "speed",
+   "params": {
+    "speed": 2.0
+   },
+   "labels": "w_walk.bin",
+   "label_nonzero": 4968,
+   "label_mean": 0.22886857390403748,
+   "qgf_tau": {
+    "qgf_n1": 1.0,
+    "qgf_bfn4u": 1.0
+   }
+  },
+  {
+   "id": "walk_backward",
+   "family": "speed",
+   "params": {
+    "speed": -2.0
+   },
+   "labels": "w_walk_backward.bin",
+   "label_nonzero": 5032,
+   "label_mean": 0.221215158700943,
+   "qgf_tau": {
+    "qgf_n1": 1.0,
+    "qgf_bfn4u": 1.0
+   }
+  },
+  {
+   "id": "run",
+   "family": "speed",
+   "params": {
+    "speed": 10.0
+   },
+   "labels": "w_run.bin",
+   "label_nonzero": 4968,
+   "label_mean": 0.0496169812977314,
+   "qgf_tau": {
+    "qgf_n1": 1.0,
+    "qgf_bfn4u": 1.0
+   }
+  },
+  {
+   "id": "run_backward",
+   "family": "speed",
+   "params": {
+    "speed": -10.0
+   },
+   "labels": "w_run_backward.bin",
+   "label_nonzero": 5032,
+   "label_mean": 0.04800328239798546,
+   "qgf_tau": {
+    "qgf_n1": 0.3,
+    "qgf_bfn4u": 0.3
+   }
+  }
+ ],
+ "knobs": [
+  {
+   "id": "speed",
+   "family": "speed",
+   "param": "speed",
+   "name": "target speed",
+   "unit": "m/s",
+   "min": -10.0,
+   "max": 10.0,
+   "step": 0.5,
+   "note": "speed 0 is a margin-0 step: reward 1 whenever the torso does not move backward"
+  }
+ ],
+ "files": {
+  "abi_grad.onnx": {
+   "bytes": 26966152,
+   "sha256": "32d5f0085e92a27941b2a5e7f69e142a17c9328d91b0781b616891b11e43952a",
+   "opset": 18,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      17
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      10000
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "grad",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ]
+  },
+  "abi_score.onnx": {
+   "bytes": 26981565,
+   "sha256": "f37bb65f0a72286fe5391a18f10453afc0a11943aea1dd0c102ce4c992161afa",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      17
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      10000
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "scores",
+     "dtype": "float32",
+     "shape": [
+      "N"
+     ]
+    }
+   ]
+  },
+  "flow_bc_propose.onnx": {
+   "bytes": 418176,
+   "sha256": "03c439212139141bf6d49b22555b199cb9b433241371d2fe641d1f6724dbecea",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      17
+     ]
+    },
+    {
+     "name": "noise",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "actions",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ]
+  },
+  "flow_bc_velocity.onnx": {
+   "bytes": 389313,
+   "sha256": "20271217e10aaf32f0e9b3f0a0abf9e38818a486ce02f91a1ef3b0cc8507b5d5",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      17
+     ]
+    },
+    {
+     "name": "x_t",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    },
+    {
+     "name": "t",
+     "dtype": "float32",
+     "shape": [
+      1
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "velocity",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ]
+  },
+  "ref_features.bin": {
+   "bytes": 80000,
+   "sha256": "a698b36eeb829a4a7e908e81f02d26770bd95b6da95473189c9ba1b551d6c8a2"
+  },
+  "w_run.bin": {
+   "bytes": 40000,
+   "sha256": "67f1a6e43ebe3c69385bc70d37948746fc9f58ef9d3afe79a1378b81aa3ae99c"
+  },
+  "w_run_backward.bin": {
+   "bytes": 40000,
+   "sha256": "cec297327f5487c8fbd7721740194c998eb747a8b0879a350717ef85261ab401"
+  },
+  "w_walk.bin": {
+   "bytes": 40000,
+   "sha256": "80cc6a1bdaafecc2e4a266d23a6f8b06cfea1faa30f695dbf47c5ecb6f3427ce"
+  },
+  "w_walk_backward.bin": {
+   "bytes": 40000,
+   "sha256": "45d11cd48faaa47523bced3bb9cfab4f1312d6a56b6edfc310dd577f1d26726a"
+  }
+ },
+ "paper": {
+  "note": "per-task mean episode return of the seed-3917 cells (20 resets each, CUDA); Tab. 1 = mean over seeds 3917/3502/8948",
+  "tab1_mean_3_seeds_hexec1": {
+   "flow_bc": 103.5,
+   "bfn16": 566.0,
+   "qgf": 671.5,
+   "qgf_bfn4u": 670.7
+  },
+  "seed_3917": {
+   "flow_bc": {
+    "mean": 106.89552706132083,
+    "per_task": {
+     "walk": 119.99505835824709,
+     "walk_backward": 235.48602110464472,
+     "run": 24.242953423669526,
+     "run_backward": 47.85807535872196
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_hexec1/base/test/cheetah__s3917__h1__n1/result.json"
+   },
+   "bfn16": {
+    "mean": 568.0578469513157,
+    "per_task": {
+     "walk": 798.3702449213376,
+     "walk_backward": 961.6884955028632,
+     "run": 223.58136889127962,
+     "run_backward": 288.5912784897823
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_hexec1/abi/test/cheetah__s3917__h1__n16/result.json"
+   },
+   "qgf": {
+    "mean": 678.8674036899317,
+    "per_task": {
+     "walk": 933.8994879296899,
+     "walk_backward": 980.0456263013868,
+     "run": 360.18826498255055,
+     "run_backward": 441.3362355460996
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_qgf/qgf/r40000/test/cheetah__s3917__h1/result.json"
+   },
+   "qgf_bfn4u": {
+    "mean": 683.5863942802395,
+    "per_task": {
+     "walk": 944.8113505241756,
+     "walk_backward": 981.4410882445297,
+     "run": 355.64421024606315,
+     "run_backward": 452.4489281061891
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_qgf/qgf_bfn4u/r40000/test/cheetah__s3917__h1/result.json"
+   }
+  }
+ }
+}

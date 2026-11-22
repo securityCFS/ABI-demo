@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABI playground</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%276%27 fill=%27%23f0a63a%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
+</head>
+<body>
+<header>
+  <div class="titlerow">
+    <a class="back" href="../" title="Back to the paper page">← Paper</a>
+    <div class="title"><b>ABI</b> playground · <span id="title-env">AntMaze</span></div>
+    <select id="env" title="Environment (switching reloads the page)"></select>
+  </div>
+</header>
+<main>
+  <section id="view">
+    <canvas id="scene"></canvas>
+    <div id="hud">
+      <div class="legend"><i class="dot ant"></i><span id="hud-mk">ABI-guided</span> <span class="hv" id="hud-lines"></span></div>
+      <div class="legend" id="hud-ghost"><i class="dot ghost"></i><span id="hud-gk">unguided</span> <span class="hv" id="hud-g">–</span></div>
+      <div class="hstep"><span class="k">step</span> <span id="hud-t">0</span></div>
+    </div>
+    <div id="banner" hidden></div>
+    <div id="loading"><div class="spinner"></div><div id="loading-msg">Loading MuJoCo and models…</div></div>
+    <div id="intro" hidden>
+      <h4>How it works</h4>
+      <ol>
+        <li id="intro-1">Pick a task on the right.</li>
+        <li><b class="c-ant">Orange</b>: a frozen policy guided by ABI's critic. <b class="c-ghost">Blue</b>: the same policy without ABI, from the same state.</li>
+        <li>Switch the task, turn guidance off, or let ABI guide a different policy at any time.</li>
+      </ol>
+      <button id="intro-ok" class="primary">Got it</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </section>
+  <aside id="panel">
+    <div class="card">
+      <h3><span class="num">1</span><span id="goal-title">Task</span></h3>
+      <canvas id="map"></canvas>
+      <div class="row tasks" id="tasks"></div>
+      <div id="knobs"></div>
+      <div class="note" id="task-hint"></div>
+    </div>
+    <div class="card">
+      <h3><span class="num">2</span>Orange: a frozen policy + ABI</h3>
+      <select id="policy" title="The policy that ABI guides"></select>
+      <div class="note" id="policy-note"></div>
+      <div class="seg" id="guide-toggle">
+        <button data-g="on">ABI guidance on</button>
+        <button data-g="off">off (unguided)</button>
+      </div>
+      <div class="note" id="mode-note"></div>
+    </div>
+    <div class="card run">
+      <div class="row">
+        <button id="play" class="primary">Play</button>
+        <button id="reset" title="New episode from a new start state">New episode</button>
+        <select id="speed" title="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="0">max</option></select>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Episodes this session</h3>
+      <table id="tally"><thead><tr><th>setting</th><th class="num" id="tally-head">reached</th><th class="num" id="tally-head2">mean steps</th></tr></thead><tbody></tbody></table>
+      <div class="note" id="tally-empty">Finished episodes appear here.</div>
+    </div>
+    <details class="card" id="advanced">
+      <summary>Advanced settings</summary>
+      <div id="ghost-block">
+      <h3>Blue run <span class="tag">comparison</span></h3>
+      <select id="ghost-policy"><option value="same">the same policy, without ABI</option></select>
+      <div class="note" id="ghost-note"></div>
+      </div>
+      <h3 class="sp">Guidance method</h3>
+      <div class="seg three" id="mode">
+        <button data-mode="bfn">Best-of-N</button>
+        <button data-mode="qgf">QGF</button>
+        <button data-mode="qgf_bfn">QGF, best of 4+1</button>
+      </div>
+      <div class="slider" id="n-row"><span>N candidates</span><input type="range" id="n" min="1" max="6" step="1" value="4"><b id="n-val">16</b></div>
+      <div class="slider" id="a-row"><span>QGF strength α</span><input type="range" id="alpha" min="0" max="5" step="1" value="2"><b id="a-val">0.3</b></div>
+      <div class="note" id="method-note"></div>
+      <div class="seg small" id="hexec">
+        <button data-h="1">replan every step</button>
+        <button data-h="8">execute whole chunk</button>
+      </div>
+      <h3 class="sp">Display</h3>
+      <label class="check"><input type="checkbox" id="auto"> start a new episode automatically</label>
+      <label class="check"><input type="checkbox" id="follow"> <span id="follow-label">camera follows the agent</span></label>
+      <label class="check" id="refs-row"><input type="checkbox" id="refs" checked> show reference states on the map (red: labelled by the goal)</label>
+      <label class="check" id="restart-row"><input type="checkbox" id="restart-on-goal"> <span id="restart-label">restart from the start when the goal moves</span></label>
+      <div class="row"><button id="step" title="Advance one control step">Step once</button></div>
+      <div class="note" id="goal-note"></div>
+    </details>
+    <details class="card" id="scores-card">
+      <summary>Critic scores</summary>
+      <canvas id="scores" height="90"></canvas>
+      <div class="note" id="scores-note">The N proposals of the policy at the last decision. The highlighted one is executed.</div>
+      <canvas id="value" height="70"></canvas>
+      <div class="note">Critic value of the executed chunk over the episode. <span id="hud-ms"></span></div>
+    </details>
+    <div class="foot" id="foot"></div>
+  </aside>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

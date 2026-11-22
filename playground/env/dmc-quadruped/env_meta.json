@@ -1,0 +1,350 @@
+{
+ "kind": "dmc",
+ "domain": "quadruped",
+ "dataset": "quadruped",
+ "nq": 23,
+ "nv": 22,
+ "nu": 12,
+ "na": 12,
+ "timestep": 0.005,
+ "n_sub_steps": 4,
+ "control_timestep": 0.02,
+ "episode_length": 1000,
+ "max_episode_steps": 1000,
+ "step_rule": "dm_control legacy step (Physics.legacy_step): set ctrl; mj_step2; mj_step x (n_sub_steps - 1); mj_step1. Observation and reward are read after it: position/velocity-stage quantities at the new state, acceleration-stage sensors (accelerometer, force, torque) from the forward pass of the last substep.",
+ "action": {
+  "dim": 12,
+  "bounds": [
+   -1.0,
+   1.0
+  ],
+  "ctrlrange": [
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.1
+   ],
+   [
+    -0.8,
+    0.8
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.1
+   ],
+   [
+    -0.8,
+    0.8
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.1
+   ],
+   [
+    -0.8,
+    0.8
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.1
+   ],
+   [
+    -0.8,
+    0.8
+   ]
+  ],
+  "map": "dm_control action_scale.Wrapper under NumPy 1.x promotion; per task (tasks[].action_map): float64: lo + (hi - lo) / 2 * f32(a + 1); float32 (suite tasks, ActionDTypeWrapper): all in float32"
+ },
+ "dsbl_actuation": 2048,
+ "obs": {
+  "dim": 78,
+  "keys": {
+   "egocentric_state": 44,
+   "torso_velocity": 3,
+   "torso_upright": 1,
+   "imu": 6,
+   "force_torque": 24
+  },
+  "segments": [
+   {
+    "name": "egocentric_state.hinge_qpos",
+    "src": "qpos",
+    "idx": [
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22
+    ]
+   },
+   {
+    "name": "egocentric_state.hinge_qvel",
+    "src": "qvel",
+    "idx": [
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21
+    ]
+   },
+   {
+    "name": "egocentric_state.act",
+    "src": "act",
+    "idx": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11
+    ]
+   },
+   {
+    "name": "torso_velocity",
+    "src": "sensordata",
+    "idx": [
+     6,
+     7,
+     8
+    ]
+   },
+   {
+    "name": "torso_upright",
+    "src": "xmat",
+    "idx": [
+     17
+    ]
+   },
+   {
+    "name": "imu",
+    "src": "sensordata",
+    "idx": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   {
+    "name": "force_torque",
+    "src": "sensordata",
+    "fn": "asinh",
+    "idx": [
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32
+    ]
+   }
+  ],
+  "dtype": "float32 (flatten of the OrderedDict, cast once)"
+ },
+ "reward_features": [
+  {
+   "name": "torso_upright",
+   "src": "xmat",
+   "idx": 17
+  },
+  {
+   "name": "torso_velocity_x",
+   "src": "sensordata",
+   "idx": 6
+  },
+  {
+   "name": "com_height",
+   "src": "sensordata",
+   "idx": 35
+  }
+ ],
+ "families": [
+  {
+   "id": "stand",
+   "label": "Stand upright",
+   "rule": "upright = tol(torso_upright, [1, inf), margin 2, linear, 0)"
+  },
+  {
+   "id": "move",
+   "label": "Walk / run forward",
+   "param": "speed",
+   "rule": "upright * tol(torso_velocity_x, [speed, inf), margin speed, linear, 0.5)"
+  },
+  {
+   "id": "jump",
+   "label": "Jump",
+   "param": "height",
+   "rule": "upright * tol(com_height, [height, inf), margin height, linear, 0.5)"
+  }
+ ],
+ "knobs": [
+  {
+   "id": "speed",
+   "family": "move",
+   "param": "speed",
+   "name": "target speed",
+   "unit": "m/s",
+   "min": 0.25,
+   "max": 5.0,
+   "step": 0.25,
+   "note": "forward velocity of the torso in its own frame (velocimeter x)"
+  },
+  {
+   "id": "height",
+   "family": "jump",
+   "param": "height",
+   "name": "target height",
+   "unit": "m",
+   "min": 0.5,
+   "max": 1.5,
+   "step": 0.05,
+   "note": "height of the centre of mass"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "stand",
+   "label": "Stand",
+   "family": "stand",
+   "params": {},
+   "w": "w_stand.bin",
+   "dm_control": "URLB-style task (not in dm_control suite): quadruped.Stand",
+   "action_map": "float64"
+  },
+  {
+   "id": "walk",
+   "label": "Walk",
+   "family": "move",
+   "params": {
+    "speed": 0.5
+   },
+   "w": "w_walk.bin",
+   "dm_control": "dm_control.suite.quadruped.Move",
+   "action_map": "float32"
+  },
+  {
+   "id": "run",
+   "label": "Run",
+   "family": "move",
+   "params": {
+    "speed": 5.0
+   },
+   "w": "w_run.bin",
+   "dm_control": "dm_control.suite.quadruped.Move",
+   "action_map": "float32"
+  },
+  {
+   "id": "jump",
+   "label": "Jump",
+   "family": "jump",
+   "params": {
+    "height": 1.0
+   },
+   "w": "w_jump.bin",
+   "dm_control": "URLB-style task (not in dm_control suite): quadruped.Jump",
+   "action_map": "float64"
+  }
+ ],
+ "reset": {
+  "kind": "quadruped",
+  "rule": "orientation = randn(4) / |.|; root xy = 0; z = 0, 0.01, 0.02, ... (accumulated in float64) until ncon == 0, each try after mj_resetData and an actuation-disabled mj_forward; then an actuation-disabled mj_forward (dm_control reset_context)",
+  "z_step": 0.01,
+  "max_attempts": 10000
+ },
+ "camera": {
+  "follow": "torso",
+  "distance": 3.2,
+  "elevation": -18
+ },
+ "floor_size_by_task": {
+  "stand": [
+   10.0,
+   10.0
+  ],
+  "walk": [
+   10.0,
+   10.0
+  ],
+  "run": [
+   100.0,
+   100.0
+  ],
+  "jump": [
+   10.0,
+   10.0
+  ]
+ },
+ "notes": [
+  "The task models are identical except the floor size of some tasks (rendering only: planes are infinite for collisions).",
+  "success is null: DMC tasks have no success test; the score is the episode return."
+ ],
+ "view": {
+  "distance": 4.5,
+  "elevation": -20,
+  "note": "page camera (display only); 'camera' records the paper's"
+ }
+}

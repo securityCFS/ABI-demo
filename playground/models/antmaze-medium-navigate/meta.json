@@ -1,0 +1,535 @@
+{
+ "dataset": "antmaze-medium-navigate-v0",
+ "training_seed": 3917,
+ "sd": 29,
+ "ad": 8,
+ "R": 8086,
+ "chunk_len": 8,
+ "history_len": 16,
+ "flow_steps": 10,
+ "action_clip": [
+  -1.0,
+  1.0
+ ],
+ "episode_limit": 1000,
+ "control_dt": 0.1,
+ "critic": {
+  "row": "w0 (critic trained with w_N = 0), density readout m_D",
+  "temperature": 1.0,
+  "score": "softmax_k(mean_heads F(window, chunk) . B_ref_k / T) . w",
+  "H_score": 8,
+  "query": 256,
+  "note": "scores are probabilities-weighted sums of w (in [0, 1] for 0/1 labels); only their argmax/gradient is used",
+  "action_tokens": "The model pads each 8-step chunk to 32 action steps and masks the padding. These graphs feed the 8 chunk steps only, which gives identical outputs (433/433 steps bit-identical to the 32-step graphs) at about half the cost."
+ },
+ "reward_rule": {
+  "w_k": "1 if ||ref_xy_k - goal_xy||_2 <= 0.5 else 0",
+  "threshold": 0.5,
+  "shift": "+1 applied to the -1/0 env reward",
+  "discounting": "none (per-state label of the arrival state s'; T only enters the diagnostic, not the readout)",
+  "reproduces_paper_labels": "max abs diff 0 on all 5 tasks (float32 and float64 rule)"
+ },
+ "history_rule": {
+  "contents": "raw observations (flatten_obs, float32), oldest first, current observation LAST",
+  "deque": "maxlen 16; starts as [obs_after_reset]; append the new observation after every env.step",
+  "window": "history[16, sd] = last min(len,16) observations right-aligned, zero rows on the left; history_valid[16] = 1 on filled rows, 0 on padded rows",
+  "at_reset": "len 1: only row 15 valid"
+ },
+ "noise": {
+  "paper": "torch.Generator(device).manual_seed(reset_seed + 17001); one torch.randn((N, 8, ad)) per replan, sequential stream over the episode (device = cuda in the paper; CPU and CUDA streams differ)",
+  "qgf_bfn4u_unguided": "second generator manual_seed(reset_seed + 27001), torch.randn((1, 8, ad)) per replan",
+  "browser": "any N(0, 1) float32 noise of shape [N, 8, ad]; bit-exact paper streams are not reproducible in JS"
+ },
+ "sampler": {
+  "time_grid": [
+   0.0,
+   0.1,
+   0.2,
+   0.3,
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.8,
+   0.9
+  ],
+  "update": "x <- x + v(s, x, t_i) / 10 (float32 division by 10)",
+  "output": "clip(x, -1, 1) after the 10th step",
+  "t_input": "flow time t_i as float32 [1]"
+ },
+ "protocols": {
+  "bfn16_hexec1": {
+   "N": 16,
+   "H_plan": 8,
+   "H_score": 8,
+   "H_exec": 1,
+   "replan": "every env step",
+   "select": "argmax scores"
+  },
+  "bfn16_hexec8": {
+   "N": 16,
+   "H_plan": 8,
+   "H_score": 8,
+   "H_exec": 8,
+   "replan": "every 8 env steps",
+   "select": "argmax scores"
+  },
+  "base": {
+   "N": 1,
+   "H_exec": "1 or 8",
+   "select": "the single Flow BC+ draw"
+  },
+  "qgf_bfn4u": {
+   "N": "4 QGF draws (tau per task, qgf_bfn4u) + 1 unguided draw",
+   "H_exec": 8,
+   "select": "argmax scores over 5"
+  },
+  "qgf_n1": {
+   "N": 1,
+   "H_exec": 8,
+   "tau": "per task, qgf_n1"
+  }
+ },
+ "qgf": {
+  "keep_dct": 3,
+  "gripper_dims": [],
+  "lowpass_8x8": [
+   [
+    0.5788732767105103,
+    0.41726163029670715,
+    0.17283540964126587,
+    -0.04055296629667282,
+    -0.13622376322746277,
+    -0.09961208701133728,
+    0.009515078738331795,
+    0.09790340065956116
+   ],
+   [
+    0.41726163029670715,
+    0.33444708585739136,
+    0.20387326180934906,
+    0.07716453820466995,
+    -0.003941278904676437,
+    -0.027096599340438843,
+    -0.011223775334656239,
+    0.009515057317912579
+   ],
+   [
+    0.17283540964126587,
+    0.20387326180934906,
+    0.23877620697021484,
+    0.24048493802547455,
+    0.18629175424575806,
+    0.08444704115390778,
+    -0.027096616104245186,
+    -0.09961213916540146
+   ],
+   [
+    -0.04055296629667282,
+    0.07716453820466995,
+    0.24048493802547455,
+    0.34790343046188354,
+    0.32887330651283264,
+    0.18629169464111328,
+    -0.003941296134144068,
+    -0.13622379302978516
+   ],
+   [
+    -0.13622376322746277,
+    -0.003941278904676437,
+    0.18629175424575806,
+    0.32887330651283264,
+    0.34790337085723877,
+    0.24048487842082977,
+    0.07716453820466995,
+    -0.04055292531847954
+   ],
+   [
+    -0.09961208701133728,
+    -0.027096599340438843,
+    0.08444704115390778,
+    0.18629169464111328,
+    0.24048487842082977,
+    0.23877619206905365,
+    0.20387335121631622,
+    0.17283551394939423
+   ],
+   [
+    0.009515078738331795,
+    -0.011223775334656239,
+    -0.027096616104245186,
+    -0.003941296134144068,
+    0.07716453820466995,
+    0.20387335121631622,
+    0.33444711565971375,
+    0.41726168990135193
+   ],
+   [
+    0.09790340065956116,
+    0.009515057317912579,
+    -0.09961213916540146,
+    -0.13622379302978516,
+    -0.04055292531847954,
+    0.17283551394939423,
+    0.41726168990135193,
+    0.578873336315155
+   ]
+  ],
+  "step": "endpoint=clip(x+(1-t)v,-1,1); g=grad(endpoint); pg=P@g (time axis) * mask; x <- x + v/10 + tau*sqrt(8*ad)*pg/max(||pg||_F,1e-12); tau=0 -> unguided step"
+ },
+ "tasks": [
+  {
+   "id": 1,
+   "name": "antmaze-medium-navigate-singletask-task1-v0",
+   "goal_xy": [
+    20.0,
+    20.0
+   ],
+   "init_xy_nominal": [
+    0.0,
+    0.0
+   ],
+   "reward_positives_on_reference": 79,
+   "qgf_tau": {
+    "qgf_n1": 0.1,
+    "qgf_bfn4u": 0.0
+   },
+   "gripper": "none"
+  },
+  {
+   "id": 2,
+   "name": "antmaze-medium-navigate-singletask-task2-v0",
+   "goal_xy": [
+    20.0,
+    0.0
+   ],
+   "init_xy_nominal": [
+    0.0,
+    20.0
+   ],
+   "reward_positives_on_reference": 65,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.03
+   },
+   "gripper": "none"
+  },
+  {
+   "id": 3,
+   "name": "antmaze-medium-navigate-singletask-task3-v0",
+   "goal_xy": [
+    4.0,
+    12.0
+   ],
+   "init_xy_nominal": [
+    8.0,
+    16.0
+   ],
+   "reward_positives_on_reference": 61,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.3
+   },
+   "gripper": "none"
+  },
+  {
+   "id": 4,
+   "name": "antmaze-medium-navigate-singletask-task4-v0",
+   "goal_xy": [
+    0.0,
+    20.0
+   ],
+   "init_xy_nominal": [
+    16.0,
+    20.0
+   ],
+   "reward_positives_on_reference": 69,
+   "qgf_tau": {
+    "qgf_n1": 0.1,
+    "qgf_bfn4u": 0.03
+   },
+   "gripper": "none"
+  },
+  {
+   "id": 5,
+   "name": "antmaze-medium-navigate-singletask-task5-v0",
+   "goal_xy": [
+    0.0,
+    0.0
+   ],
+   "init_xy_nominal": [
+    20.0,
+    4.0
+   ],
+   "reward_positives_on_reference": 63,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.03
+   },
+   "gripper": "none"
+  }
+ ],
+ "files": {
+  "abi_grad.onnx": {
+   "bytes": 26739137,
+   "sha256": "97d3d6fabd67d5f9d1a7e30f8904d0d34db7228f2fc404a77355d29ca470d014",
+   "opset": 18,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      29
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      8086
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "grad",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    }
+   ]
+  },
+  "abi_score.onnx": {
+   "bytes": 26742006,
+   "sha256": "6f536935b0b8b5a2ef894a31d44def25b4306ab91479f59396d8534e3d4f0935",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      29
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      8086
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "scores",
+     "dtype": "float32",
+     "shape": [
+      "N"
+     ]
+    }
+   ]
+  },
+  "flow_bc_propose.onnx": {
+   "bytes": 463394,
+   "sha256": "831b3d8fb7b87b1deaaf4551b6be70fe724e8ca87d44909062c9ad0513b4a906",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      29
+     ]
+    },
+    {
+     "name": "noise",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "actions",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    }
+   ]
+  },
+  "flow_bc_velocity.onnx": {
+   "bytes": 434531,
+   "sha256": "61a477338cbb393ffd7e1be0ba0d7277ea6ce00a984428fc4d4b5b714c5e5a1f",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      29
+     ]
+    },
+    {
+     "name": "x_t",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    },
+    {
+     "name": "t",
+     "dtype": "float32",
+     "shape": [
+      1
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "velocity",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    }
+   ]
+  },
+  "flow_bcplus_propose.onnx": {
+   "bytes": 3556734,
+   "sha256": "b182a542e8f86551e45bd6bb9401dfec986bdde3217c491c981a1e60c861cf6c",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      29
+     ]
+    },
+    {
+     "name": "noise",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "actions",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    }
+   ]
+  },
+  "flow_bcplus_velocity.onnx": {
+   "bytes": 3503292,
+   "sha256": "b1b76051ad4f90d32fd2716b35bf8caf4ef18163424464b0464566f6ed6ee671",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      29
+     ]
+    },
+    {
+     "name": "x_t",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    },
+    {
+     "name": "t",
+     "dtype": "float32",
+     "shape": [
+      1
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "velocity",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      8
+     ]
+    }
+   ]
+  },
+  "ref_xy.bin": {
+   "bytes": 64688,
+   "sha256": "748fc7a235ab7106636b210de19cd84469de9661aa31d05221464288cacb55e7",
+   "dtype": "float32",
+   "shape": [
+    8086,
+    2
+   ],
+   "layout": "row-major [x0, y0, x1, y1, ...], order of b_ref"
+  }
+ },
+ "init_xy_noise": {
+  "rule": "init_xy = init_xy_nominal + U(-a, a)^2 at every reset",
+  "a": 1.0
+ },
+ "env_note": "OGBench MazeEnv adds U(-1,1)*maze_unit/4 noise to the initial xy from the global numpy RNG (not controlled by the reset seed); goals are fixed for singletask envs (no goal noise)."
+}

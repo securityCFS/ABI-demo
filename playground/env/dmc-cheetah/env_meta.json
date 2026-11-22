@@ -1,0 +1,238 @@
+{
+ "kind": "dmc",
+ "domain": "cheetah",
+ "dataset": "cheetah",
+ "nq": 9,
+ "nv": 9,
+ "nu": 6,
+ "na": 0,
+ "timestep": 0.01,
+ "n_sub_steps": 1,
+ "control_timestep": 0.01,
+ "episode_length": 1000,
+ "max_episode_steps": 1000,
+ "step_rule": "dm_control legacy step (Physics.legacy_step): set ctrl; mj_step2; mj_step x (n_sub_steps - 1); mj_step1. Observation and reward are read after it: position/velocity-stage quantities at the new state, acceleration-stage sensors (accelerometer, force, torque) from the forward pass of the last substep.",
+ "action": {
+  "dim": 6,
+  "bounds": [
+   -1.0,
+   1.0
+  ],
+  "ctrlrange": [
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ]
+  ],
+  "map": "dm_control action_scale.Wrapper under NumPy 1.x promotion; per task (tasks[].action_map): float64: lo + (hi - lo) / 2 * f32(a + 1); float32 (suite tasks, ActionDTypeWrapper): all in float32"
+ },
+ "dsbl_actuation": 2048,
+ "obs": {
+  "dim": 17,
+  "keys": {
+   "position": 8,
+   "velocity": 9
+  },
+  "segments": [
+   {
+    "name": "position",
+    "src": "qpos",
+    "idx": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   {
+    "name": "velocity",
+    "src": "qvel",
+    "idx": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   }
+  ],
+  "dtype": "float32 (flatten of the OrderedDict, cast once)"
+ },
+ "reward_features": [
+  {
+   "name": "torso_subtreelinvel_x",
+   "src": "sensordata",
+   "idx": 0
+  }
+ ],
+ "families": [
+  {
+   "id": "speed",
+   "label": "Run at a target speed (negative = backward)",
+   "param": "speed",
+   "rule": "tol(sign(speed) * torso_subtreelinvel_x, [|speed|, inf), margin |speed|, linear, 0)"
+  }
+ ],
+ "knobs": [
+  {
+   "id": "speed",
+   "family": "speed",
+   "param": "speed",
+   "name": "target speed",
+   "unit": "m/s",
+   "min": -10.0,
+   "max": 10.0,
+   "step": 0.5,
+   "note": "speed 0 is a margin-0 step: reward 1 whenever the torso does not move backward"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "walk",
+   "label": "Walk",
+   "family": "speed",
+   "params": {
+    "speed": 2.0
+   },
+   "w": "w_walk.bin",
+   "dm_control": "URLB-style task (not in dm_control suite): cheetah.Cheetah",
+   "action_map": "float64"
+  },
+  {
+   "id": "walk_backward",
+   "label": "Walk backward",
+   "family": "speed",
+   "params": {
+    "speed": -2.0
+   },
+   "w": "w_walk_backward.bin",
+   "dm_control": "URLB-style task (not in dm_control suite): cheetah.Cheetah",
+   "action_map": "float64"
+  },
+  {
+   "id": "run",
+   "label": "Run",
+   "family": "speed",
+   "params": {
+    "speed": 10.0
+   },
+   "w": "w_run.bin",
+   "dm_control": "dm_control.suite.cheetah.Cheetah",
+   "action_map": "float32"
+  },
+  {
+   "id": "run_backward",
+   "label": "Run backward",
+   "family": "speed",
+   "params": {
+    "speed": -10.0
+   },
+   "w": "w_run_backward.bin",
+   "dm_control": "URLB-style task (not in dm_control suite): cheetah.Cheetah",
+   "action_map": "float64"
+  }
+ ],
+ "reset": {
+  "kind": "joints",
+  "rule": "limited joints (id order) ~ U(range) (one numpy uniform each); then 200 physics steps (mj_step2, mj_step x 199, mj_step1; bitwise equal to 200 x (mj_step2, mj_step1)) from the un-forwarded randomized pose; time = 0; then an actuation-disabled mj_forward",
+  "joints": [
+   {
+    "name": "bthigh",
+    "qposadr": 3,
+    "lo": -0.5235987755982988,
+    "hi": 1.0471975511965976
+   },
+   {
+    "name": "bshin",
+    "qposadr": 4,
+    "lo": -0.8726646259971648,
+    "hi": 0.8726646259971648
+   },
+   {
+    "name": "bfoot",
+    "qposadr": 5,
+    "lo": -4.014257279586958,
+    "hi": 0.8726646259971648
+   },
+   {
+    "name": "fthigh",
+    "qposadr": 6,
+    "lo": -0.9948376736367679,
+    "hi": 0.006981317007977318
+   },
+   {
+    "name": "fshin",
+    "qposadr": 7,
+    "lo": -1.2217304763960306,
+    "hi": 0.8726646259971648
+   },
+   {
+    "name": "ffoot",
+    "qposadr": 8,
+    "lo": -0.4886921905584123,
+    "hi": 0.4886921905584123
+   }
+  ],
+  "settle_steps": 200
+ },
+ "camera": {
+  "follow": "torso",
+  "distance": 3.0,
+  "elevation": -10
+ },
+ "floor_size_by_task": {
+  "walk": [
+   200.0,
+   0.8
+  ],
+  "walk_backward": [
+   200.0,
+   0.8
+  ],
+  "run": [
+   100.0,
+   0.8
+  ],
+  "run_backward": [
+   200.0,
+   0.8
+  ]
+ },
+ "notes": [
+  "The task models are identical except the floor size of some tasks (rendering only: planes are infinite for collisions).",
+  "success is null: DMC tasks have no success test; the score is the episode return."
+ ],
+ "view": {
+  "distance": 4.2,
+  "elevation": -12,
+  "note": "page camera (display only); 'camera' records the paper's"
+ }
+}

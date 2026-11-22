@@ -1,0 +1,290 @@
+{
+ "kind": "dmc",
+ "domain": "walker",
+ "dataset": "walker",
+ "nq": 9,
+ "nv": 9,
+ "nu": 6,
+ "na": 0,
+ "timestep": 0.0025,
+ "n_sub_steps": 10,
+ "control_timestep": 0.025,
+ "episode_length": 1000,
+ "max_episode_steps": 1000,
+ "step_rule": "dm_control legacy step (Physics.legacy_step): set ctrl; mj_step2; mj_step x (n_sub_steps - 1); mj_step1. Observation and reward are read after it: position/velocity-stage quantities at the new state, acceleration-stage sensors (accelerometer, force, torque) from the forward pass of the last substep.",
+ "action": {
+  "dim": 6,
+  "bounds": [
+   -1.0,
+   1.0
+  ],
+  "ctrlrange": [
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ],
+   [
+    -1.0,
+    1.0
+   ]
+  ],
+  "map": "dm_control action_scale.Wrapper under NumPy 1.x promotion; per task (tasks[].action_map): float64: lo + (hi - lo) / 2 * f32(a + 1); float32 (suite tasks, ActionDTypeWrapper): all in float32"
+ },
+ "dsbl_actuation": 2048,
+ "obs": {
+  "dim": 24,
+  "keys": {
+   "orientations": 14,
+   "height": 1,
+   "velocity": 9
+  },
+  "segments": [
+   {
+    "name": "orientations",
+    "src": "xmat",
+    "idx": [
+     9,
+     11,
+     18,
+     20,
+     27,
+     29,
+     36,
+     38,
+     45,
+     47,
+     54,
+     56,
+     63,
+     65
+    ]
+   },
+   {
+    "name": "height",
+    "src": "xpos",
+    "idx": [
+     5
+    ]
+   },
+   {
+    "name": "velocity",
+    "src": "qvel",
+    "idx": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   }
+  ],
+  "dtype": "float32 (flatten of the OrderedDict, cast once)"
+ },
+ "reward_features": [
+  {
+   "name": "torso_height",
+   "src": "xpos",
+   "idx": 5
+  },
+  {
+   "name": "torso_upright",
+   "src": "xmat",
+   "idx": 17
+  },
+  {
+   "name": "torso_subtreelinvel_x",
+   "src": "sensordata",
+   "idx": 0
+  },
+  {
+   "name": "torso_subtree_angmom_y",
+   "src": "subtree_angmom",
+   "idx": 4
+  }
+ ],
+ "families": [
+  {
+   "id": "speed",
+   "label": "Stand / walk / run at a target speed",
+   "param": "speed",
+   "rule": "speed 0: stand = (3 tol(torso_height, [1.2, inf), margin 0.6, gaussian, 0.1) + (1 + torso_upright) / 2) / 4; speed > 0: stand * (5 tol(torso_subtreelinvel_x, [speed, inf), margin speed / 2, linear, 0.5) + 1) / 6"
+  },
+  {
+   "id": "spin",
+   "label": "Spin (angular momentum about y)",
+   "param": "angmom",
+   "rule": "tol(torso_subtree_angmom_y, [angmom, inf), margin angmom, linear, 0)"
+  }
+ ],
+ "knobs": [
+  {
+   "id": "speed",
+   "family": "speed",
+   "param": "speed",
+   "name": "target speed",
+   "unit": "m/s",
+   "min": 0.0,
+   "max": 8.0,
+   "step": 0.25,
+   "note": "0 is the stand reward"
+  },
+  {
+   "id": "angmom",
+   "family": "spin",
+   "param": "angmom",
+   "name": "target spin",
+   "unit": "kg m^2/s",
+   "min": 2.0,
+   "max": 20.0,
+   "step": 1.0,
+   "note": "angular momentum of the torso subtree about the y axis"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "stand",
+   "label": "Stand",
+   "family": "speed",
+   "params": {
+    "speed": 0.0
+   },
+   "w": "w_stand.bin",
+   "dm_control": "dm_control.suite.walker.PlanarWalker",
+   "action_map": "float32"
+  },
+  {
+   "id": "walk",
+   "label": "Walk",
+   "family": "speed",
+   "params": {
+    "speed": 1.0
+   },
+   "w": "w_walk.bin",
+   "dm_control": "dm_control.suite.walker.PlanarWalker",
+   "action_map": "float32"
+  },
+  {
+   "id": "run",
+   "label": "Run",
+   "family": "speed",
+   "params": {
+    "speed": 8.0
+   },
+   "w": "w_run.bin",
+   "dm_control": "dm_control.suite.walker.PlanarWalker",
+   "action_map": "float32"
+  },
+  {
+   "id": "spin",
+   "label": "Spin",
+   "family": "spin",
+   "params": {
+    "angmom": 10.0
+   },
+   "w": "w_spin.bin",
+   "dm_control": "URLB-style task (not in dm_control suite): walker.PlanarWalker",
+   "action_map": "float64"
+  }
+ ],
+ "reset": {
+  "kind": "joints",
+  "rule": "randomize_limited_and_rotational_joints: joints in id order, limited hinge/slide ~ U(range), unlimited hinge ~ U(-pi, pi), unlimited slide unchanged (one numpy uniform each); then an actuation-disabled mj_forward",
+  "joints": [
+   {
+    "name": "rooty",
+    "qposadr": 2,
+    "lo": -3.141592653589793,
+    "hi": 3.141592653589793
+   },
+   {
+    "name": "right_hip",
+    "qposadr": 3,
+    "lo": -0.3490658503988659,
+    "hi": 1.7453292519943295
+   },
+   {
+    "name": "right_knee",
+    "qposadr": 4,
+    "lo": -2.6179938779914944,
+    "hi": 0.0
+   },
+   {
+    "name": "right_ankle",
+    "qposadr": 5,
+    "lo": -0.7853981633974483,
+    "hi": 0.7853981633974483
+   },
+   {
+    "name": "left_hip",
+    "qposadr": 6,
+    "lo": -0.3490658503988659,
+    "hi": 1.7453292519943295
+   },
+   {
+    "name": "left_knee",
+    "qposadr": 7,
+    "lo": -2.6179938779914944,
+    "hi": 0.0
+   },
+   {
+    "name": "left_ankle",
+    "qposadr": 8,
+    "lo": -0.7853981633974483,
+    "hi": 0.7853981633974483
+   }
+  ],
+  "settle_steps": 0
+ },
+ "camera": {
+  "follow": "torso",
+  "distance": 3.0,
+  "elevation": -10
+ },
+ "floor_size_by_task": {
+  "stand": [
+   250.0,
+   0.8
+  ],
+  "walk": [
+   250.0,
+   0.8
+  ],
+  "run": [
+   250.0,
+   0.8
+  ],
+  "spin": [
+   250.0,
+   0.8
+  ]
+ },
+ "notes": [
+  "The task models are identical except the floor size of some tasks (rendering only: planes are infinite for collisions).",
+  "success is null: DMC tasks have no success test; the score is the episode return."
+ ],
+ "view": {
+  "distance": 4.2,
+  "elevation": -12,
+  "note": "page camera (display only); 'camera' records the paper's"
+ }
+}

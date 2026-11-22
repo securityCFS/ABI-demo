@@ -1,0 +1,456 @@
+{
+ "dataset": "walker",
+ "suite": "DMC (ExORL data)",
+ "training_seed": 3917,
+ "sd": 24,
+ "ad": 6,
+ "R": 10000,
+ "chunk_len": 8,
+ "history_len": 16,
+ "flow_steps": 10,
+ "action_clip": [
+  -1.0,
+  1.0
+ ],
+ "episode_limit": 1000,
+ "control_dt": 0.025,
+ "critic": {
+  "row": "m_psi (rule S DMC row): production critic, ExORL ridge readout on the frozen EMA psi",
+  "score": "Q = mass * mean_heads F(window16, chunk8 at query 256) . z,  z = M w",
+  "readout": "ridge_z: z = (G + lam I)^-1 Psi^T w / n,  G = Psi^T Psi / n,  lam = 1e-4 * max eig(G) (float64)",
+  "M": "baked into abi_score/abi_grad as a float32 [d, R] matrix; minimum-norm rank-T correction so that M w_task reproduces the paper's cached z of every paper task (see the report)",
+  "mass": 49.99999999999996,
+  "gamma": 0.98,
+  "d": 256,
+  "R": 10000,
+  "lam": 0.02536862108601187,
+  "H_score": 8,
+  "query": 256,
+  "heads": "mean of the phi predictor heads",
+  "note": "only argmax and gradient of Q are used"
+ },
+ "reference": {
+  "rule": "10k arrival states s' = obs[t+1] of the critic's readout reference (paper.Inference(episodes, training seed)), in the critic's order",
+  "labels": "per-task dm_control reward of the arrival state (relabel: set_state + set_control in a reset context, mj_forward, mj_fwdPosition, mj_sensorVel, mj_subtreeVel), float32",
+  "features": [
+   "torso_height",
+   "torso_upright",
+   "torso_subtreelinvel_x",
+   "torso_subtree_angmom_y"
+  ],
+  "features_file": "ref_features.bin (float64 [R, F], row-major)",
+  "features_dtype_note": "float64: the float32-rounded features change 5e3-6e3 labels by 1 float32 ulp per task, the float64 features reproduce every shipped label bit for bit",
+  "feature_ranges": {
+   "torso_height": {
+    "min": 0.0456031502461558,
+    "p1": 0.07293371978384591,
+    "p50": 0.3990616368172453,
+    "p99": 1.3104028912670933,
+    "max": 1.795491074156828
+   },
+   "torso_upright": {
+    "min": -0.9999997990414676,
+    "p1": -0.9870869748829111,
+    "p50": -0.04310246960146519,
+    "p99": 0.9984129731516165,
+    "max": 0.9999996596739383
+   },
+   "torso_subtreelinvel_x": {
+    "min": -3.930451996683369,
+    "p1": -1.897999545352324,
+    "p50": 0.1381122471576979,
+    "p99": 2.3801196800603797,
+    "max": 3.539252174568106
+   },
+   "torso_subtree_angmom_y": {
+    "min": -41.37558236988481,
+    "p1": -25.809007320519864,
+    "p50": 0.5277290591004529,
+    "p99": 28.234417644155037,
+    "max": 47.99150748845692
+   }
+  }
+ },
+ "history_rule": {
+  "contents": "raw observations (flatten_obs, float32), oldest first, current observation LAST",
+  "deque": "maxlen 16; [obs_after_reset] at reset; append the new observation after every env.step",
+  "window": "last min(len,16) observations right-aligned, zero rows on the left; valid = 1 on filled rows"
+ },
+ "noise": {
+  "paper": "torch.Generator(device).manual_seed(reset + 17001), torch.randn((N, 8, ad)) per replan (cuda in the paper)",
+  "qgf_bfn4u_unguided": "second generator manual_seed(reset + 27001), torch.randn((1, 8, ad)) per replan",
+  "demo": "any standard normal stream; the browser reproduces the distribution, not the paper's streams"
+ },
+ "sampler": {
+  "time_grid": [
+   0.0,
+   0.1,
+   0.2,
+   0.3,
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.8,
+   0.9
+  ],
+  "update": "x <- x + v(s, x, t_i) / 10",
+  "output": "clip(x, -1, 1)"
+ },
+ "protocols": {
+  "base": {
+   "N": 1,
+   "H_exec": 1
+  },
+  "bfn16_hexec1": {
+   "N": 16,
+   "H_exec": 1,
+   "select": "argmax Q"
+  },
+  "qgf_bfn4u_hexec1": {
+   "guided": 4,
+   "unguided": 1,
+   "H_exec": 1,
+   "select": "argmax Q over 5 (paper headline mode)"
+  },
+  "qgf_hexec1": {
+   "guided": 1,
+   "H_exec": 1
+  }
+ },
+ "qgf": {
+  "keep_dct": 3,
+  "gripper_dims": [],
+  "step": "tau * sqrt(8 * ad) * P g / max(||P g||_F, 1e-12) at the clipped Euler endpoint"
+ },
+ "tasks": [
+  {
+   "id": "stand",
+   "family": "speed",
+   "params": {
+    "speed": 0.0
+   },
+   "labels": "w_stand.bin",
+   "label_nonzero": 10000,
+   "label_mean": 0.24450412392616272,
+   "qgf_tau": {
+    "qgf_n1": 1.0,
+    "qgf_bfn4u": 0.1
+   }
+  },
+  {
+   "id": "walk",
+   "family": "speed",
+   "params": {
+    "speed": 1.0
+   },
+   "labels": "w_walk.bin",
+   "label_nonzero": 10000,
+   "label_mean": 0.11266686767339706,
+   "qgf_tau": {
+    "qgf_n1": 0.3,
+    "qgf_bfn4u": 0.3
+   }
+  },
+  {
+   "id": "run",
+   "family": "speed",
+   "params": {
+    "speed": 8.0
+   },
+   "labels": "w_run.bin",
+   "label_nonzero": 10000,
+   "label_mean": 0.0519869327545166,
+   "qgf_tau": {
+    "qgf_n1": 0.3,
+    "qgf_bfn4u": 1.0
+   }
+  },
+  {
+   "id": "spin",
+   "family": "spin",
+   "params": {
+    "angmom": 10.0
+   },
+   "labels": "w_spin.bin",
+   "label_nonzero": 5267,
+   "label_mean": 0.34337660670280457,
+   "qgf_tau": {
+    "qgf_n1": 0.3,
+    "qgf_bfn4u": 0.3
+   }
+  }
+ ],
+ "knobs": [
+  {
+   "id": "speed",
+   "family": "speed",
+   "param": "speed",
+   "name": "target speed",
+   "unit": "m/s",
+   "min": 0.0,
+   "max": 8.0,
+   "step": 0.25,
+   "note": "0 is the stand reward"
+  },
+  {
+   "id": "angmom",
+   "family": "spin",
+   "param": "angmom",
+   "name": "target spin",
+   "unit": "kg m^2/s",
+   "min": 2.0,
+   "max": 20.0,
+   "step": 1.0,
+   "note": "angular momentum of the torso subtree about the y axis"
+  }
+ ],
+ "files": {
+  "abi_grad.onnx": {
+   "bytes": 26970240,
+   "sha256": "039728d187ec95371912c631da05baedf5c35752cedb52f329200150420995a8",
+   "opset": 18,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      24
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      10000
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "grad",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ]
+  },
+  "abi_score.onnx": {
+   "bytes": 26985653,
+   "sha256": "32d15fcf78a43874b77396790e68ca4da993e2eba6a8d3d0bfdb2a953bbdfd98",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      24
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      10000
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "scores",
+     "dtype": "float32",
+     "shape": [
+      "N"
+     ]
+    }
+   ]
+  },
+  "flow_bc_propose.onnx": {
+   "bytes": 425400,
+   "sha256": "1b2794bd8ea3e668761d5710ca1710b1f1806dbc4cb340ed42bbeaabc2cf06b5",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      24
+     ]
+    },
+    {
+     "name": "noise",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "actions",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ]
+  },
+  "flow_bc_velocity.onnx": {
+   "bytes": 396537,
+   "sha256": "d3959efc9a5ce7643f8f176d707ae8d32361e88878ff8afa68327144476f6c17",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      24
+     ]
+    },
+    {
+     "name": "x_t",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    },
+    {
+     "name": "t",
+     "dtype": "float32",
+     "shape": [
+      1
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "velocity",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      6
+     ]
+    }
+   ]
+  },
+  "ref_features.bin": {
+   "bytes": 320000,
+   "sha256": "90270ed630109395cdb4ae29bfcf1b1edba1b8a0bb50577a8d010abf71f69288"
+  },
+  "w_run.bin": {
+   "bytes": 40000,
+   "sha256": "5365a4d09112abe5ebb33edc808ef1a06b87eb62836177f699270478514c9db8"
+  },
+  "w_spin.bin": {
+   "bytes": 40000,
+   "sha256": "7c7ef708f9e886e6f6f49ecf7af644c50654bbe6a2bba965de9459a6f89c6534"
+  },
+  "w_stand.bin": {
+   "bytes": 40000,
+   "sha256": "a6860a2a3944fdaec29f41c910e3ae20bf976c31870de9ed6c6385367b64f7e0"
+  },
+  "w_walk.bin": {
+   "bytes": 40000,
+   "sha256": "37dfc86c856ad6f20b0be3e63847bc8bf5960b1182679ec718be90dc7a083bf8"
+  }
+ },
+ "paper": {
+  "note": "per-task mean episode return of the seed-3917 cells (20 resets each, CUDA); Tab. 1 = mean over seeds 3917/3502/8948",
+  "tab1_mean_3_seeds_hexec1": {
+   "flow_bc": 158.2,
+   "bfn16": 628.8,
+   "qgf": 717.6,
+   "qgf_bfn4u": 781.3
+  },
+  "seed_3917": {
+   "flow_bc": {
+    "mean": 157.91072060860228,
+    "per_task": {
+     "stand": 196.92157257392782,
+     "walk": 83.55735670677183,
+     "run": 40.28240973290314,
+     "spin": 310.88154342080645
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_hexec1/base/test/walker__s3917__h1__n1/result.json"
+   },
+   "bfn16": {
+    "mean": 630.3850246691987,
+    "per_task": {
+     "stand": 798.8815572618313,
+     "walk": 627.8555561444807,
+     "run": 214.35240782482714,
+     "spin": 880.4505774456557
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_hexec1/abi/test/walker__s3917__h1__n16/result.json"
+   },
+   "qgf": {
+    "mean": 668.8344097230372,
+    "per_task": {
+     "stand": 563.4484436893981,
+     "walk": 943.956511474916,
+     "run": 210.8256054600974,
+     "spin": 957.107078267737
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_qgf/qgf/r40000/test/walker__s3917__h1/result.json"
+   },
+   "qgf_bfn4u": {
+    "mean": 797.2715223311176,
+    "per_task": {
+     "stand": 952.9237794426401,
+     "walk": 952.1496597375146,
+     "run": 306.84596530005126,
+     "spin": 977.1666848442644
+    },
+    "episodes": 80,
+    "source": "review_d_20261105/d8_qgf/qgf_bfn4u/r40000/test/walker__s3917__h1/result.json"
+   }
+  }
+ }
+}

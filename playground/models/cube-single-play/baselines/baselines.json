@@ -1,0 +1,924 @@
+{
+ "env": "cube-single-play",
+ "dataset": "cube-single-play-v0",
+ "training_seed": 3917,
+ "default": "tdjepa",
+ "paths": "file paths are relative to models/<env>/, as for the critic files",
+ "policies": [
+  {
+   "id": "tdjepa",
+   "label": "TD-JEPA actor",
+   "short": "TD-JEPA actor",
+   "note": "The trained actor of TD-JEPA, a zero-shot RL method. It infers the task from the goal by itself.",
+   "onnx": "baselines/tdjepa_actor.onnx",
+   "sd": 28,
+   "ad": 5,
+   "z_dim": 50,
+   "io": {
+    "inputs": {
+     "obs": [
+      "B",
+      28
+     ],
+     "z": [
+      "B",
+      50
+     ],
+     "noise": [
+      "B",
+      5
+     ]
+    },
+    "outputs": {
+     "action": [
+      "B",
+      5
+     ]
+    },
+    "normalisation": "none needed: the observation normaliser and pixel encoder of this model are identities; the graph takes the raw observation"
+   },
+   "deterministic": false,
+   "noise": {
+    "input": "noise",
+    "dist": "N(0, I) of size ad",
+    "per_call": "one fresh draw per act() call, i.e. per environment step",
+    "default_seed": 1,
+    "official": "model.act(obs, z, mean=True) ignores mean and draws torch.randn((1, ad)) inside the noise-conditioned actor at every call; the paper's evaluator seeds the global torch generator with reset + 17001 once per episode"
+   },
+   "action": "tanh output in (-1, 1); the official loop applies no further clipping (the environment clips to its control range)",
+   "H_exec": 1,
+   "replan": "every environment step (single-step actor)",
+   "inference": {
+    "B": "baselines/tdjepa_B.bin",
+    "M": 10000,
+    "dim": 50,
+    "B_def": "psi(s') of the arrival observation: TD-JEPA's reward-inference features, normalised to ||psi|| = sqrt(d)",
+    "samples": "the fixed 10k reference of the paper's readouts: transitions drawn uniformly with replacement over the 1000 training episodes with numpy default_rng(3917); one-step FB and TD-JEPA use the same 10k transitions",
+    "label_points": {
+     "file": "baselines/infer_cube_xyz.bin",
+     "dim": 3,
+     "what": "cube position (qpos[14:17]) of the arrival state s' of each inference transition"
+    },
+    "label_rule": {
+     "kind": "ball",
+     "radius": 0.04,
+     "inclusive": false,
+     "hit": 1,
+     "miss": 0,
+     "goal_fill": [
+      null,
+      null,
+      0.02
+     ],
+     "note": "OGBench relabelling of the offline data at s': ||cube - goal|| < 0.04 (strict, 3-D; reward -1/0, shifted by +1), the same rule as ABI's cube labels; reproduces the cached labels of all 5 tasks exactly; a clicked (x, y) target takes z = 0.02 (table height, goal_fill)"
+    },
+    "z_rule": {
+     "kind": "lstsq_project",
+     "weighting": "none: ordinary least squares, ridge 0",
+     "shift": "+1 on the OGBench reward (labels 0/1)",
+     "normalisation": "z = sqrt(d) x / max(||x||, 1e-12) (project_z)",
+     "sample_count": 10000,
+     "formula": "x = argmin_x ||Psi x - r||_2 (torch.linalg.lstsq of the released reward_inference); browser: Cholesky solve of the normal equations in float64",
+     "no_positive": "z = 0 (as project_z of a zero vector); reported as valid = false"
+    }
+   },
+   "model": {
+    "code": "TD-JEPA released code, unmodified",
+    "training_seed": 3917,
+    "updates": 1000000,
+    "config": {
+     "lr_psi": 0.0001,
+     "lambda_psi": 10.0,
+     "grid_index": 2,
+     "selection": "released per-domain grid, selected by the final in-training success mean (prespecified rule, first in launcher order on ties)"
+    },
+    "actor_std": 0.2
+   },
+   "official_seed3917": [
+    {
+     "label": "reproduced TD-JEPA actor alone (T-a)",
+     "protocol": "actor every step (H_exec 1), z from the 10k reference, test resets 40000-40019, 20 episodes per task",
+     "mean": 25.0,
+     "per_task": {
+      "task1": 90.0,
+      "task2": 20.0,
+      "task3": 0.0,
+      "task4": 10.0,
+      "task5": 5.0
+     },
+     "episodes": 100,
+     "source": "T-a/alone/test/cube-single-play-v0__s3917__h1/result.json",
+     "source_sha256": "35a8557f5a6bcc4f37696f1e95ef576015641692f23f72db0fa8456dcd023792"
+    },
+    {
+     "label": "reproduced TD-JEPA actor alone through the actor-adaptation loop (T-c alone; the paper's \"Unguided actor\" of the external-actor table)",
+     "protocol": "same actor and z, test resets 40000-40019, 20 episodes per task",
+     "mean": 25.0,
+     "per_task": {
+      "task1": 90.0,
+      "task2": 20.0,
+      "task3": 0.0,
+      "task4": 10.0,
+      "task5": 5.0
+     },
+     "episodes": 100,
+     "source": "T-c/alone/test/cube-single-play-v0__s3917__h1/result.json",
+     "source_sha256": "afd18189c13ab4e9ed5160ca98a805608e5192113a8473994ea3fb3935deb5b2"
+    },
+    {
+     "label": "released code's own in-training evaluation at the final 1M checkpoint",
+     "protocol": "upstream evaluator: 10 episodes per task, a fresh random 10k inference batch per task, sequential environment seeds",
+     "mean": 32.0,
+     "per_task": {
+      "task1": 100.0,
+      "task2": 20.0,
+      "task3": 30.0,
+      "task4": 0.0,
+      "task5": 10.0
+     },
+     "episodes": 50,
+     "source": "G/cube-single-play-v0__s3917__g2/_COMPLETE.json",
+     "source_sha256": "90709b1d5af842abab33228af8db017371b02a9f2e92c20c9807df76da584ece"
+    }
+   ]
+  },
+  {
+   "id": "osfb",
+   "label": "One-step FB actor",
+   "short": "One-step FB actor",
+   "note": "The trained actor of one-step FB, a zero-shot RL method. It infers the task from the goal by itself.",
+   "onnx": "baselines/osfb_actor.onnx",
+   "sd": 28,
+   "ad": 5,
+   "z_dim": 128,
+   "io": {
+    "inputs": {
+     "obs": [
+      "B",
+      28
+     ],
+     "z": [
+      "B",
+      128
+     ]
+    },
+    "outputs": {
+     "action": [
+      "B",
+      5
+     ]
+    },
+    "normalisation": "none: the actor reads the raw observation concatenated with z"
+   },
+   "deterministic": true,
+   "action": "mode of the tanh-squashed Gaussian, tanh(mean), clipped to [-1, 1] (the evaluator's own clip); log std is a constant 0, so the mode is the policy's action",
+   "H_exec": 1,
+   "replan": "every environment step (single-step actor)",
+   "inference": {
+    "B": "baselines/osfb_B.bin",
+    "M": 10000,
+    "dim": 128,
+    "B_def": "backward representation B(s', a') of the arrival state and its departing action, clipped to +-(1 - 1e-5)",
+    "samples": "the fixed 10k reference of the paper's readouts: transitions drawn uniformly with replacement over the 1000 training episodes with numpy default_rng(3917); one-step FB and TD-JEPA use the same 10k transitions",
+    "label_points": {
+     "file": "baselines/infer_cube_xyz.bin",
+     "dim": 3,
+     "what": "cube position (qpos[14:17]) of the arrival state s' of each inference transition"
+    },
+    "label_rule": {
+     "kind": "ball",
+     "radius": 0.04,
+     "inclusive": false,
+     "hit": 1,
+     "miss": 0,
+     "goal_fill": [
+      null,
+      null,
+      0.02
+     ],
+     "note": "OGBench relabelling of the offline data at s': ||cube - goal|| < 0.04 (strict, 3-D; reward -1/0, shifted by +1), the same rule as ABI's cube labels; reproduces the cached labels of all 5 tasks exactly; a clicked (x, y) target takes z = 0.02 (table height, goal_fill)"
+    },
+    "z_rule": {
+     "kind": "softmax_reward_mean",
+     "temperature": 300.0,
+     "weighting": "w = softmax(T r) over the M samples (author infer_latent)",
+     "shift": "+1 on the OGBench reward (labels 0/1)",
+     "normalisation": "z = sqrt(d) m / ||m|| (normalize_latent)",
+     "sample_count": 10000,
+     "formula": "m = mean_k (w_k r_k B_k); with 0/1 labels z is sqrt(d) times the normalised sum of B over the positive samples",
+     "no_positive": "undefined in the original (0 / 0); here z = 0 and valid = false"
+    }
+   },
+   "model": {
+    "code": "one-step FB authors' agent code, unmodified",
+    "training_seed": 3917,
+    "updates": 1000000,
+    "training_note": "the first run of this seed stopped before 1M updates on a logging-only overflow; it was continued from its last checkpoint to 1M with the unmodified update, optimiser and data order",
+    "config": {
+     "latent_dim": 128,
+     "alpha": 0.3,
+     "orthonorm_coeff": 0.3,
+     "reward_temperature": 300.0,
+     "discount": 0.99,
+     "q_agg": "min",
+     "actor_hidden_dims": [
+      512,
+      512,
+      512,
+      512
+     ],
+     "activation": "gelu",
+     "tanh_squash": true,
+     "const_std": true
+    }
+   },
+   "official_seed3917": [
+    {
+     "label": "one-step FB actor alone (the paper's one-step FB column and \"Unguided actor\")",
+     "protocol": "mode of the actor every step (H_exec 1), z from the 10k reference, test resets 40000-40019, 20 episodes per task",
+     "mean": 2.0,
+     "per_task": {
+      "task1": 5.0,
+      "task2": 0.0,
+      "task3": 0.0,
+      "task4": 0.0,
+      "task5": 5.0
+     },
+     "episodes": 100,
+     "source": "osfb/alone/test/cube-single-play-v0__s3917/result.json",
+     "source_sha256": "215bfa5179d4efa73faf9eb975232da3ddc5c7bfd854f2f3e5ce1f2f13f56bd7"
+    }
+   ]
+  }
+ ],
+ "files": {
+  "infer_cube_xyz.bin": {
+   "bytes": 120000,
+   "sha256": "31186b42dcadb80355338ad42609b65dd6d8d7692d46023fb41791516576af10"
+  },
+  "osfb_B.bin": {
+   "bytes": 5120000,
+   "sha256": "c60ab50fc386c98fdd6c04bfaba12e1c66be9fb3b97c6061864ae0cf5a2b85a4"
+  },
+  "osfb_actor.onnx": {
+   "bytes": 3485956,
+   "sha256": "3eb872b64b7494a62030460bc510ebda830ae0d2dbfaf0ef448636d8f3c63407"
+  },
+  "tdjepa_B.bin": {
+   "bytes": 2000000,
+   "sha256": "068d79c4509e23d9156388cf5eeeafe283b99d0218d68445c5ed29790e717c09"
+  },
+  "tdjepa_actor.onnx": {
+   "bytes": 3413593,
+   "sha256": "61ef43f16766d0ad94a2c6dfe9d10335567b4ea0335ab615d32fc7ff264ec47a"
+  }
+ },
+ "verification": {
+  "report": "REPORT_baselines_cube-single-play.md",
+  "onnx_vs_original_max_abs": {
+   "tdjepa": {
+    "dataset_states": {
+     "n": 2000,
+     "max_abs": 1.430511474609375e-06
+    },
+    "recorded_episodes": {
+     "n_states": 862,
+     "max_abs": 1.3271346688270569e-06,
+     "episodes": [
+      {
+       "task": "cube-single-play-singletask-task1-v0",
+       "reset": 40000,
+       "success": true,
+       "steps": 62,
+       "wall_s": 1.1
+      },
+      {
+       "task": "cube-single-play-singletask-task2-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 2.5
+      },
+      {
+       "task": "cube-single-play-singletask-task3-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 2.9
+      },
+      {
+       "task": "cube-single-play-singletask-task4-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 2.7
+      },
+      {
+       "task": "cube-single-play-singletask-task5-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 2.0
+      }
+     ]
+    }
+   },
+   "osfb": {
+    "dataset_states": {
+     "n": 2000,
+     "max_abs": 6.616115570068359e-06,
+     "torch_module_max_abs": 6.884336471557617e-06
+    },
+    "recorded_episodes": {
+     "n_states": 1000,
+     "max_abs": 1.6689300537109375e-05,
+     "episodes": [
+      {
+       "task": "cube-single-play-singletask-task1-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 6.4
+      },
+      {
+       "task": "cube-single-play-singletask-task2-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 5.0
+      },
+      {
+       "task": "cube-single-play-singletask-task3-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 5.5
+      },
+      {
+       "task": "cube-single-play-singletask-task4-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 5.5
+      },
+      {
+       "task": "cube-single-play-singletask-task5-v0",
+       "reset": 40000,
+       "success": false,
+       "steps": 200,
+       "wall_s": 5.1
+      }
+     ]
+    }
+   }
+  },
+  "z_python_vs_official": {
+   "tdjepa": [
+    {
+     "task": "cube-single-play-singletask-task1-v0",
+     "positives": 199,
+     "cos_np64_vs_official": 0.9999999882740196,
+     "maxabs_np64_vs_official": 0.00037208342275126677,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999882710446,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.00037189945578575134,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 3.1515345704224984e-06
+    },
+    {
+     "task": "cube-single-play-singletask-task2-v0",
+     "positives": 231,
+     "cos_np64_vs_official": 0.999999992807669,
+     "maxabs_np64_vs_official": 0.00039405357160970933,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999928055487,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.00039458274841308594,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 1.0892524544559024e-06
+    },
+    {
+     "task": "cube-single-play-singletask-task3-v0",
+     "positives": 250,
+     "cos_np64_vs_official": 0.9999999954606272,
+     "maxabs_np64_vs_official": 0.00021415010004998628,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999954581452,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.000214284285902977,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 8.022201867241563e-07
+    },
+    {
+     "task": "cube-single-play-singletask-task4-v0",
+     "positives": 256,
+     "cos_np64_vs_official": 0.9999999896498707,
+     "maxabs_np64_vs_official": 0.0004115727552074233,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999896412765,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.00041174888610839844,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 6.435415140781942e-07
+    },
+    {
+     "task": "cube-single-play-singletask-task5-v0",
+     "positives": 225,
+     "cos_np64_vs_official": 0.9999999877498865,
+     "maxabs_np64_vs_official": 0.0004078712131506679,
+     "cos_cpu_fp32_official_fn_vs_official": 0.9999999877433762,
+     "maxabs_cpu_fp32_official_fn_vs_official": 0.0004081130027770996,
+     "maxabs_np64_vs_cpu_fp32_official_fn": 1.1312918466455102e-06
+    }
+   ],
+   "osfb": [
+    {
+     "task": "cube-single-play-singletask-task1-v0",
+     "positives": 199,
+     "cos_np64_vs_official": 0.9999999999957383,
+     "maxabs_np64_vs_official": 9.360767665833603e-06,
+     "cos_cpu_author_fn_vs_official": 0.9999999999957532,
+     "maxabs_cpu_author_fn_vs_official": 9.372830390930176e-06,
+     "maxabs_np64_vs_cpu_author_fn": 1.8732309681190884e-07
+    },
+    {
+     "task": "cube-single-play-singletask-task2-v0",
+     "positives": 231,
+     "cos_np64_vs_official": 0.9999999999983302,
+     "maxabs_np64_vs_official": 5.830015265717581e-06,
+     "cos_cpu_author_fn_vs_official": 0.9999999999983197,
+     "maxabs_cpu_author_fn_vs_official": 5.841255187988281e-06,
+     "maxabs_np64_vs_cpu_author_fn": 3.71274964550139e-07
+    },
+    {
+     "task": "cube-single-play-singletask-task3-v0",
+     "positives": 250,
+     "cos_np64_vs_official": 0.9999999999811047,
+     "maxabs_np64_vs_official": 1.98613150671767e-05,
+     "cos_cpu_author_fn_vs_official": 0.999999999981083,
+     "maxabs_cpu_author_fn_vs_official": 1.9878149032592773e-05,
+     "maxabs_np64_vs_cpu_author_fn": 3.746494905421116e-07
+    },
+    {
+     "task": "cube-single-play-singletask-task4-v0",
+     "positives": 256,
+     "cos_np64_vs_official": 0.9999999982603135,
+     "maxabs_np64_vs_official": 0.00019011861047860124,
+     "cos_cpu_author_fn_vs_official": 0.9999999982611446,
+     "maxabs_cpu_author_fn_vs_official": 0.00019009411334991455,
+     "maxabs_np64_vs_cpu_author_fn": 2.2951358191747318e-07
+    },
+    {
+     "task": "cube-single-play-singletask-task5-v0",
+     "positives": 225,
+     "cos_np64_vs_official": 0.999999999999997,
+     "maxabs_np64_vs_official": 3.112994861886875e-07,
+     "cos_cpu_author_fn_vs_official": 0.9999999999999959,
+     "maxabs_cpu_author_fn_vs_official": 5.960464477539062e-07,
+     "maxabs_np64_vs_cpu_author_fn": 3.7095646621132516e-07
+    }
+   ]
+  },
+  "official_z_recomputed_on_a100": {
+   "tdjepa": {
+    "tf32_False": {
+     "max_abs_vs_official": 0.0004115104675292969,
+     "bitwise_equal": false
+    },
+    "tf32_True": {
+     "max_abs_vs_official": 0.0,
+     "bitwise_equal": true
+    }
+   },
+   "osfb": {
+    "jax_gpu_precision_default": {
+     "max_abs_vs_official": 0.0,
+     "bitwise_equal": true
+    },
+    "jax_gpu_precision_highest": {
+     "max_abs_vs_official": 0.00019009411334991455,
+     "bitwise_equal": false
+    }
+   }
+  },
+  "js": {
+   "env": "cube-single-play",
+   "runtime": "node v24.18.0, onnxruntime-web WASM, 1 thread",
+   "policies": {
+    "tdjepa": {
+     "load_ms": 328.067775,
+     "set_goal_ms": 1.641341599999987,
+     "act_ms": 0.25495223200000006,
+     "tasks": [
+      {
+       "task": "cube-single-play-singletask-task1-v0",
+       "goal": [
+        0.425,
+        -0.1,
+        0.02
+       ],
+       "positives_js": 199,
+       "positives_official": 199,
+       "valid": true,
+       "cos": 0.9999999882739076,
+       "max_abs": 0.000372081995010376
+      },
+      {
+       "task": "cube-single-play-singletask-task2-v0",
+       "goal": [
+        0.5,
+        0,
+        0.02
+       ],
+       "positives_js": 231,
+       "positives_official": 231,
+       "valid": true,
+       "cos": 0.9999999928079021,
+       "max_abs": 0.0003940463066101074
+      },
+      {
+       "task": "cube-single-play-singletask-task3-v0",
+       "goal": [
+        0.35,
+        0,
+        0.02
+       ],
+       "positives_js": 250,
+       "positives_official": 250,
+       "valid": true,
+       "cos": 0.9999999954604649,
+       "max_abs": 0.00021415017545223236
+      },
+      {
+       "task": "cube-single-play-singletask-task4-v0",
+       "goal": [
+        0.5,
+        0.2,
+        0.02
+       ],
+       "positives_js": 256,
+       "positives_official": 256,
+       "valid": true,
+       "cos": 0.9999999896497332,
+       "max_abs": 0.00041162967681884766
+      },
+      {
+       "task": "cube-single-play-singletask-task5-v0",
+       "goal": [
+        0.5,
+        -0.2,
+        0.02
+       ],
+       "positives_js": 225,
+       "positives_official": 225,
+       "valid": true,
+       "cos": 0.9999999877488944,
+       "max_abs": 0.00040787458419799805
+      }
+     ],
+     "recorded_states": {
+      "n": 64,
+      "max_abs_vs_original": 2.980232238769531e-07
+     }
+    },
+    "osfb": {
+     "load_ms": 31.21271200000001,
+     "set_goal_ms": 1.9919020000000045,
+     "act_ms": 0.23883998799999995,
+     "tasks": [
+      {
+       "task": "cube-single-play-singletask-task1-v0",
+       "goal": [
+        0.425,
+        -0.1,
+        0.02
+       ],
+       "positives_js": 199,
+       "positives_official": 199,
+       "valid": true,
+       "cos": 0.9999999999957404,
+       "max_abs": 9.357929229736328e-06
+      },
+      {
+       "task": "cube-single-play-singletask-task2-v0",
+       "goal": [
+        0.5,
+        0,
+        0.02
+       ],
+       "positives_js": 231,
+       "positives_official": 231,
+       "valid": true,
+       "cos": 0.9999999999983316,
+       "max_abs": 5.826354026794434e-06
+      },
+      {
+       "task": "cube-single-play-singletask-task3-v0",
+       "goal": [
+        0.35,
+        0,
+        0.02
+       ],
+       "positives_js": 250,
+       "positives_official": 250,
+       "valid": true,
+       "cos": 0.9999999999811195,
+       "max_abs": 1.9863247871398926e-05
+      },
+      {
+       "task": "cube-single-play-singletask-task4-v0",
+       "goal": [
+        0.5,
+        0.2,
+        0.02
+       ],
+       "positives_js": 256,
+       "positives_official": 256,
+       "valid": true,
+       "cos": 0.9999999982603812,
+       "max_abs": 0.00019012391567230225
+      },
+      {
+       "task": "cube-single-play-singletask-task5-v0",
+       "goal": [
+        0.5,
+        -0.2,
+        0.02
+       ],
+       "positives_js": 225,
+       "positives_official": 225,
+       "valid": true,
+       "cos": 0.9999999999999973,
+       "max_abs": 3.5762786865234375e-07
+      }
+     ],
+     "recorded_states": {
+      "n": 64,
+      "max_abs_vs_original": 1.0371208190917969e-05
+     }
+    }
+   }
+  },
+  "closed_loop": {
+   "env": "cube-single-play",
+   "note": "success % (episodes); se = binomial standard error of the mean over episodes",
+   "policies": {
+    "tdjepa": {
+     "js": {
+      "code": "demo/js/baselines.js + the demo environment, MuJoCo 3.17.0 WASM, onnxruntime-web WASM, node",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 22.0,
+       "se": 4.1,
+       "per_task": {
+        "task1": 85.0,
+        "task2": 0.0,
+        "task3": 15.0,
+        "task4": 0.0,
+        "task5": 10.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 24.8,
+       "se": 1.9,
+       "per_task": {
+        "task1": 82.0,
+        "task2": 13.0,
+        "task3": 22.0,
+        "task4": 3.0,
+        "task5": 4.0
+       }
+      }
+     },
+     "official_env_official_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the official latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 26.0,
+       "se": 4.4,
+       "per_task": {
+        "task1": 95.0,
+        "task2": 10.0,
+        "task3": 20.0,
+        "task4": 5.0,
+        "task5": 0.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 27.2,
+       "se": 2.0,
+       "per_task": {
+        "task1": 93.0,
+        "task2": 11.0,
+        "task3": 29.0,
+        "task4": 2.0,
+        "task5": 1.0
+       }
+      }
+     },
+     "official_env_shipped_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the shipped latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 26.0,
+       "se": 4.4,
+       "per_task": {
+        "task1": 95.0,
+        "task2": 10.0,
+        "task3": 20.0,
+        "task4": 5.0,
+        "task5": 0.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 27.0,
+       "se": 2.0,
+       "per_task": {
+        "task1": 92.0,
+        "task2": 11.0,
+        "task3": 29.0,
+        "task4": 2.0,
+        "task5": 1.0
+       }
+      }
+     },
+     "official_seed3917": [
+      {
+       "label": "reproduced TD-JEPA actor alone (T-a)",
+       "mean": 25.0,
+       "per_task": {
+        "task1": 90.0,
+        "task2": 20.0,
+        "task3": 0.0,
+        "task4": 10.0,
+        "task5": 5.0
+       },
+       "episodes": 100
+      },
+      {
+       "label": "reproduced TD-JEPA actor alone through the actor-adaptation loop (T-c alone; the paper's \"Unguided actor\" of the external-actor table)",
+       "mean": 25.0,
+       "per_task": {
+        "task1": 90.0,
+        "task2": 20.0,
+        "task3": 0.0,
+        "task4": 10.0,
+        "task5": 5.0
+       },
+       "episodes": 100
+      },
+      {
+       "label": "released code's own in-training evaluation at the final 1M checkpoint",
+       "mean": 32.0,
+       "per_task": {
+        "task1": 100.0,
+        "task2": 20.0,
+        "task3": 30.0,
+        "task4": 0.0,
+        "task5": 10.0
+       },
+       "episodes": 50
+      }
+     ]
+    },
+    "osfb": {
+     "js": {
+      "code": "demo/js/baselines.js + the demo environment, MuJoCo 3.17.0 WASM, onnxruntime-web WASM, node",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 3.0,
+       "se": 1.7,
+       "per_task": {
+        "task1": 0.0,
+        "task2": 5.0,
+        "task3": 10.0,
+        "task4": 0.0,
+        "task5": 0.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 3.4,
+       "se": 0.8,
+       "per_task": {
+        "task1": 2.0,
+        "task2": 6.0,
+        "task3": 2.0,
+        "task4": 4.0,
+        "task5": 3.0
+       }
+      }
+     },
+     "official_env_official_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the official latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 1.0,
+       "se": 1.0,
+       "per_task": {
+        "task1": 0.0,
+        "task2": 5.0,
+        "task3": 0.0,
+        "task4": 0.0,
+        "task5": 0.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 1.8,
+       "se": 0.6,
+       "per_task": {
+        "task1": 1.0,
+        "task2": 2.0,
+        "task3": 1.0,
+        "task4": 1.0,
+        "task5": 4.0
+       }
+      }
+     },
+     "official_env_shipped_z": {
+      "code": "OGBench environment (official OGBench env, MuJoCo 3.3.7, CPU) with the shipped ONNX actor and the shipped latent",
+      "r20": {
+       "resets": [
+        40000,
+        40019
+       ],
+       "episodes": 100,
+       "mean": 0.0,
+       "se": 0.0,
+       "per_task": {
+        "task1": 0.0,
+        "task2": 0.0,
+        "task3": 0.0,
+        "task4": 0.0,
+        "task5": 0.0
+       }
+      },
+      "r100": {
+       "resets": [
+        40000,
+        40099
+       ],
+       "episodes": 500,
+       "mean": 1.0,
+       "se": 0.4,
+       "per_task": {
+        "task1": 0.0,
+        "task2": 0.0,
+        "task3": 0.0,
+        "task4": 2.0,
+        "task5": 3.0
+       }
+      }
+     },
+     "official_seed3917": [
+      {
+       "label": "one-step FB actor alone (the paper's one-step FB column and \"Unguided actor\")",
+       "mean": 2.0,
+       "per_task": {
+        "task1": 5.0,
+        "task2": 0.0,
+        "task3": 0.0,
+        "task4": 0.0,
+        "task5": 5.0
+       },
+       "episodes": 100
+      }
+     ]
+    }
+   }
+  }
+ }
+}

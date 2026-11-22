@@ -1,0 +1,324 @@
+// Simulation and inference run here, off the UI thread. The main thread renders the poses it receives.
+// The environment module is chosen by env_meta.kind (js/envs/<kind>.js), see ENV_INTERFACE.md.
+import loadMujoco from '../vendor/mujoco/mujoco.js';
+import { Rng } from './sim.js';
+import { Guide } from './guide.js';
+
+let mj, env, ghost, guide, meta, envMeta, modelDir;
+// policy: the policy ABI guides, a Flow BC id of demo.json (cfg.actor = that id) or a zero-shot RL actor of
+// baselines.json (cfg.actor = the default Flow BC, whose flow completes the actor's candidates). ghostPolicy: the blue
+// run, 'same' (the same policy without ABI), 'base' (Flow BC without ABI) or an actor id.
+let cfg = { actor: null, policy: null, mode: 'bfn', N: 16, alpha: 0.1, hexec: 1, ghost: true, ghostPolicy: 'same' };
+let hold = false;     // video capture: the page asks the simulation to wait while its frame queue is long
+let baselineSpecs = [], baselineMods = new Map(), ZActor = null;
+let speed = 1, playing = false, busy = false, stepOnce = false, epoch = 0;
+let episodeSeed = 1, rngMain, rngGhost, rngReset, ownMain, ownGhost, rngActor;
+let plan = [], ghostPlan = [], history = [], ghostHistory = [];
+let wallStart = 0, simStart = 0, recentMs = [], DT = 0.1, frameEvery = 1, EnvClass = null, settingTask = 0, envMod = null;
+let refFeatures = null;
+const labelCache = new Map();
+// The simulation runs ahead of the display by a lead that covers the slowest recent decision, so the
+// display plays at an even pace while a decision is computed.
+const leadMs = () => Math.min(1500, Math.max(250, 1.3 * Math.max(0, ...recentMs) + 80));
+
+const post = (m, t) => self.postMessage(m, t || []);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fetchText = async p => { const r = await fetch(p); if (!r.ok) throw new Error(`${p}: ${r.status}`); return r.text(); };
+const fetchJSON = async p => JSON.parse(await fetchText(p));
+const fetchBytes = async p => { const r = await fetch(p); if (!r.ok) throw new Error(`${p}: ${r.status}`); return new Uint8Array(await r.arrayBuffer()); };
+
+async function init(name, autoplay) {
+  const envDir = new URL(`../env/${name}/`, import.meta.url);
+  modelDir = new URL(`../models/${name}/`, import.meta.url);
+  post({ type: 'progress', msg: 'Loading MuJoCo…' });
+  mj = await loadMujoco();
+  envMeta = await fetchJSON(new URL('env_meta.json', envDir));
+  envMod = await import(`./envs/${envMeta.kind || 'locomaze'}.js`);
+  const { Env } = envMod;
+  const xml = await fetchText(new URL('scene.xml', envDir));
+  if (Env.prepare) await Env.prepare(mj, envDir, fetchBytes);      // e.g. mesh assets into the WASM file system
+  let assets = null;                                                // mesh files the scene references by name
+  if (envMeta.assets) {
+    post({ type: 'progress', msg: 'Loading the robot meshes…' });
+    const dir = new URL(envMeta.asset_dir || 'assets/', envDir);
+    const files = await Promise.all(envMeta.assets.map(n => fetchBytes(new URL(n, dir))));
+    assets = Object.fromEntries(envMeta.assets.map((n, k) => [n, files[k]]));
+  }
+  EnvClass = Env;
+  env = adapt(new Env(mj, xml, envMeta, assets)); ghost = adapt(new Env(mj, xml, envMeta, null, env));   // the ghost shares the compiled model
+  DT = envMeta.control_dt || envMeta.control_timestep || 0.1;
+  // frames for the display: every substep for short control steps, about 5 per control step otherwise
+  const sub = envMeta.substeps || envMeta.n_sub_steps || envMeta.frame_skip || 1;
+  frameEvery = Math.max(1, Math.floor(sub / Math.max(1, Math.round(DT * 120))));   // at most about 120 frames per simulated second
+  meta = await fetchJSON(new URL('demo.json', modelDir));
+  guide = await Guide.load(p => fetchBytes(new URL(p, modelDir)), meta, msg => post({ type: 'progress', msg }));
+  cfg.actor = guide.defaultActor; cfg.policy = cfg.actor;
+  // Comparison policies for the ghost run (task-conditioned zero-shot actors), loaded on first selection.
+  try {
+    const spec = await fetchJSON(new URL('baselines/baselines.json', modelDir));
+    baselineSpecs = spec.policies || spec;
+    ({ ZActor } = await import('./baselines.js'));
+  } catch (e) { baselineSpecs = []; }
+  if (meta.default_mode) cfg.mode = meta.default_mode;
+  rngReset = new Rng(1); env.reset(rngReset);
+  post({ type: 'ready', name, desc: env.describe(), envMeta, features: env.ui, tasks: env.tasks(), models: guide.info(),
+         refXY: guide.refXY, cfg, marker: env.marker(),
+         baselines: baselineSpecs.map(b => ({ id: b.id, label: b.label, short: b.short, note: b.note })) });
+  await applyTask(0, true);
+  if (autoplay) { playing = true; wallStart = performance.now(); simStart = 0; loop(); }
+}
+
+// Defaults for the optional parts of the environment interface (ENV_INTERFACE.md lists the required ones).
+function adapt(e) {
+  const meta = e.meta || envMeta;
+  // UI flags (`ui`); an environment may name them `features` (the ant), DMC uses `features()` for reward features
+  e.ui = e.features && typeof e.features === 'object' ? e.features : meta.kind === 'manipspace'
+    ? { clickGoal: 'table', clickStart: false, taskSwitch: 'restart', successTask: true }
+    : { taskSwitch: 'continue', successTask: meta.success_task === true,
+        // task sliders between the paper's presets are off: a closed-loop sweep showed no graded behaviour between
+        // presets (tests/results/knob_sweep), so the page offers the presets only
+        knobs: meta.show_knobs ? meta.knobs : null };
+  if (!e.tasks) e.tasks = () => meta.tasks.map((t, k) => ({ label: t.label || `Task ${k + 1}`,
+    title: t.title || (t.goal_xyz ? `OGBench evaluation task ${k + 1} (${t.task_name || ''}): move the cube from (${t.init_xyz.slice(0, 2)}) to (${t.goal_xyz.slice(0, 2)})` : '') }));
+  if (!e.marker) e.marker = () => ({ goal: e.goal ? Array.from(e.goal) : null });
+  if (!e.newLeg) e.newLeg = () => { e.t = 0; e.ret = 0; e.success = e.success === null ? null : false; e.done = false; };
+  if (!e.setStart) e.setStart = () => {};
+  if (!e.setGoal) e.setGoal = () => {};
+  if (e.taskIdx === undefined) { const set = e.setTask.bind(e); e.taskIdx = 0; e.setTask = k => { e.taskIdx = k; set(k); }; }
+  if (e.ret === undefined) e.ret = 0;
+  return e;
+}
+
+async function baseline(id) {
+  if (!baselineMods.has(id)) {
+    const spec = baselineSpecs.find(b => b.id === id);
+    post({ type: 'progress', msg: `Loading ${spec.label}…` });
+    const za = await ZActor.load(p => fetchBytes(new URL(p, modelDir)), spec);   // spec paths are relative to models/<env>/
+    za.setRng(new Rng(episodeSeed * 15485863 + 7));
+    baselineMods.set(id, za); await taskToBaseline(za);
+  }
+  return baselineMods.get(id);
+}
+// The comparison actors infer their task from the same goal, through their own zero-shot inference.
+async function taskToBaseline(za) {
+  if (!env.goal) return;
+  const r = za.setGoal(env.goal);
+  post({ type: 'ghost_info', id: za.spec.id, count: r.count, total: r.total, valid: r.valid });
+}
+async function taskToBaselines() { for (const za of baselineMods.values()) await taskToBaseline(za); }
+
+const f32 = b => new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4).slice();
+let refPoints = null;
+// Reward labels of the reference states for the current task or goal.
+async function labels() {
+  const L = meta.critic.labels, k = env.taskIdx, t = k !== null ? envMeta.tasks[k] : null;
+  const f = L && t ? (L[t.id] || L[String(k + 1)] || L[k]) : null;
+  settingTask = k;
+  if (f) {
+    if (!labelCache.has(f)) labelCache.set(f, f32(await fetchBytes(new URL(f, modelDir))));
+    return { ...guide.setW(labelCache.get(f)), mask: null, settingTask, meanLabel: mean(labelCache.get(f)) };
+  }
+  // A knob value (DMC): the task's reward at every reference state, from the stored reward features; the QGF tau
+  // is that of the nearest preset of the same family (meta.knob_alpha_rule).
+  if (meta.critic.features && env.knobTask) {
+    if (!refFeatures) { const b = await fetchBytes(new URL(meta.critic.features, modelDir)); refFeatures = new Float64Array(b.buffer, b.byteOffset, b.byteLength / 8).slice(); }
+    const w = envMod.labels(envMeta, refFeatures, env.knobTask);
+    settingTask = envMeta.tasks.indexOf(envMod.nearestPreset(envMeta, env.knobTask));
+    return { ...guide.setW(w), mask: null, settingTask, meanLabel: mean(w) };
+  }
+  // A clicked goal. Objects (cube): the environment's 3-D goal rule on the reference object positions; the QGF
+  // settings are those of the nearest task (meta.click_alpha_rule). The ant: the guide's 2-D rule on the torso positions.
+  if (EnvClass.goalLabels && meta.critic.ref_xyz) {
+    if (!refPoints) refPoints = f32(await fetchBytes(new URL(meta.critic.ref_xyz, modelDir)));
+    const w = Float32Array.from(EnvClass.goalLabels(refPoints, env.goal));
+    if (meta.click_alpha_rule) {
+      let best = Infinity;
+      envMeta.tasks.forEach((tk, j) => { const g = tk.goal_xyz || [], d = Math.hypot(g[0] - env.goal[0], g[1] - env.goal[1]); if (d < best) { best = d; settingTask = j; } });
+    }
+    return { ...guide.setW(w), mask: null, settingTask };
+  }
+  return { ...guide.setGoal(env.goal), settingTask: null };
+}
+// QGF gripper rule of the paper (per task): mask the critic's push on the gripper dims, or guide them too.
+function qgfMask() {
+  const tg = meta.task_gripper, key = cfg.mode === 'qgf' ? 'qgf' : 'qgf_bfn';
+  if (!tg || !cfg.mode.startsWith('qgf') || settingTask === null || !tg[key]) return [];
+  return tg[key][settingTask] === 'mask' ? (meta.qgf.gripper_dims || []) : [];
+}
+
+function mean(w) { let s = 0; for (let i = 0; i < w.length; i++) s += w[i]; return s / w.length; }
+// A knob value that equals a preset is that preset (the paper's label file and tau).
+function presetOf(task) {
+  return envMeta.tasks.findIndex(t => t.family === task.family &&
+    Object.keys(task.params).every(q => Math.abs((t.params[q] ?? NaN) - task.params[q]) < 1e-9));
+}
+async function applyTask(k, restart) {
+  if (typeof k === 'object' && k !== null) {
+    const p = presetOf(k);
+    if (p >= 0) k = p;
+    else {
+      env.setTask(k); ghost.setTask(k); env.taskIdx = null; ghost.taskIdx = null; env.knobTask = k; ghost.knobTask = k;
+      post({ type: 'goal_info', task: null, knob: k, marker: env.marker(), ...(await labels()) });
+      if (restart) { episodeSeed += 1; newEpisode(); sendPoses(); } else newLeg();
+      return;
+    }
+  }
+  env.knobTask = null; ghost.knobTask = null;
+  env.setTask(k); ghost.setTask(k);
+  post({ type: 'goal_info', task: k, marker: env.marker(), ...(await labels()) });
+  await taskToBaselines();
+  if (restart) { episodeSeed += 1; newEpisode(); sendPoses(); } else newLeg();
+}
+
+function newLeg() {           // continue from the current state under the new task or goal, with a fresh budget
+  env.newLeg(); ghost.newLeg(); plan = []; ghostPlan = [];
+  post({ type: 'leg_start', marker: env.marker(), task: env.taskIdx, knob: env.knobTask || null }); status();
+}
+
+function resetHistory(o) { return [o]; }
+function pushHistory(h, o) { h.push(o); if (h.length > guide.window) h.shift(); }
+
+function newEpisode() {
+  epoch += 1;
+  rngReset = new Rng(episodeSeed * 7919 + 13);
+  rngMain = new Rng(episodeSeed * 104729 + 1);
+  rngGhost = new Rng(episodeSeed * 104729 + 1);     // same noise stream as the main run's first draw
+  // an RL actor's own action draws its noise from ownMain / ownGhost (the same stream, so the unguided blue run is the
+  // orange run without ABI), its further candidates and the flow tails from rngActor
+  ownMain = new Rng(episodeSeed * 15485863 + 7); ownGhost = new Rng(episodeSeed * 15485863 + 7);
+  rngActor = new Rng(episodeSeed * 15485863 + 11);
+  env.reset(rngReset); ghost.copyStateFrom(env);
+  for (const za of baselineMods.values()) za.setRng(new Rng(episodeSeed * 15485863 + 7));
+  plan = []; ghostPlan = [];
+  history = resetHistory(env.obs()); ghostHistory = resetHistory(ghost.obs());
+  wallStart = performance.now(); simStart = 0;
+  post({ type: 'episode_start', marker: env.marker(), task: env.taskIdx, seed: episodeSeed });
+  status();
+}
+
+function runInfo(e) { return { t: e.t, ret: e.ret, success: e.success, done: e.done, hud: e.hud() }; }
+function status(decision) {
+  post({ type: 'status', ...runInfo(env), playing, ghost: cfg.ghost ? runInfo(ghost) : null, decision });
+}
+
+// One frame of the current poses (both runs), sent after a reset so the view shows the new start at once.
+function sendPoses() {
+  const L = 12 * env.dynamicGeoms.length;
+  sendFrame([env.poses(new Float64Array(L))], cfg.ghost ? [ghost.poses(new Float64Array(L))] : null);
+}
+function sendFrame(mainBatch, ghostBatch) {
+  const n = mainBatch.length, L = mainBatch[0].length;
+  const m = new Float64Array(n * L); mainBatch.forEach((b, k) => m.set(b, k * L));
+  let g = null;
+  if (ghostBatch) { g = new Float64Array(n * L); ghostBatch.forEach((b, k) => g.set(b, k * L)); }
+  post({ type: 'frames', n, dt: DT / Math.max(1, n), main: m, ghost: g, t: env.t }, g ? [m.buffer, g.buffer] : [m.buffer]);
+}
+
+const isActor = id => baselineSpecs.some(b => b.id === id);
+// The blue run's policy: an actor id, or 'bc' (the Flow BC of cfg.actor without ABI).
+function ghostOf(c) {
+  const g = c.ghostPolicy || 'same';
+  if (g === 'same') return isActor(c.policy) ? c.policy : 'bc';
+  return g === 'base' ? 'bc' : g;
+}
+
+async function tick() {
+  const myEpoch = epoch, t0 = performance.now();
+  let decision = null;
+  if (!env.done && plan.length === 0) {
+    let d;
+    if (isActor(cfg.policy)) {
+      // ABI guiding an RL actor (paper, App. "Guiding external trained actors"): one action, replanning every step
+      const za = await baseline(cfg.policy);
+      if (myEpoch !== epoch) return;
+      const obs = env.obs(), own = await za.ownAction(obs, ownMain);
+      d = cfg.mode === 'unguided' ? { actions: [own], scores: null, chosen: 0, N: 1, mode: 'unguided', ms: performance.now() - t0 }
+        : await guide.decideActor(await za.candidates(obs, own, rngActor, 16), obs, history, rngActor);
+    } else d = await guide.decide({ ...cfg, maskDims: qgfMask() }, env.obs(), history, rngMain);
+    if (myEpoch !== epoch) return;
+    plan = d.actions.slice(0, cfg.hexec); decision = d;
+  }
+  if (cfg.ghost && !ghost.done && ghostPlan.length === 0) {
+    const gp = ghostOf(cfg);
+    if (gp !== 'bc') {
+      const za = await baseline(gp);
+      if (myEpoch !== epoch) return;
+      ghostPlan = [await za.ownAction(ghost.obs(), ownGhost)];
+    } else {
+      const d = await guide.decide({ ...cfg, mode: 'unguided', N: 1 }, ghost.obs(), ghostHistory, rngGhost);
+      if (myEpoch !== epoch) return;
+      ghostPlan = d.actions.slice(0, cfg.hexec);
+    }
+  }
+  if (decision) { recentMs.push(performance.now() - t0); if (recentMs.length > 16) recentMs.shift(); }
+  const L = 12 * env.dynamicGeoms.length, mainBatch = [], ghostBatch = cfg.ghost ? [] : null;
+  const a = env.done ? null : plan.shift(), ga = cfg.ghost && !ghost.done ? ghostPlan.shift() : null;
+  if (a) env.step(a, k => { if (k === undefined || (k + 1) % frameEvery === 0) mainBatch.push(env.poses(new Float64Array(L))); });
+  if (ga) ghost.step(ga, k => { if (k === undefined || (k + 1) % frameEvery === 0) ghostBatch.push(ghost.poses(new Float64Array(L))); });
+  const n = Math.max(mainBatch.length, ghostBatch ? ghostBatch.length : 0, 1);
+  while (mainBatch.length < n) mainBatch.push(env.poses(new Float64Array(L)));
+  while (ghostBatch && ghostBatch.length < n) ghostBatch.push(ghost.poses(new Float64Array(L)));
+  if (a) pushHistory(history, env.obs());
+  if (ga) pushHistory(ghostHistory, ghost.obs());
+  sendFrame(mainBatch, ghostBatch);
+  status(decision ? { scores: decision.scores, chosen: decision.chosen, N: decision.N, ms: decision.ms, mode: decision.mode } : undefined);
+  const allDone = env.done && (!cfg.ghost || ghost.done);
+  if (allDone) {
+    post({ type: 'episode_end', main: runInfo(env), ghost: cfg.ghost ? runInfo(ghost) : null, task: env.taskIdx, knob: env.knobTask || null, cfg: { ...cfg } });
+    playing = false; status();
+  }
+  while (hold && playing && myEpoch === epoch) await sleep(15);
+  // pace to wall clock (speed 0 = as fast as possible, but yield so that messages such as pause get through)
+  if (speed === 0) await sleep(0);
+  if (speed > 0) {
+    simStart += DT;
+    const target = wallStart + 1000 * simStart / speed - leadMs(), now = performance.now();
+    if (target > now) await sleep(target - now);
+    else if (now - target > 2000) { wallStart = now; simStart = 0; }
+  }
+}
+
+async function loop() {
+  if (busy) return; busy = true;
+  try {
+    while (playing || stepOnce) {
+      stepOnce = false;
+      await tick();
+    }
+  } catch (e) { playing = false; post({ type: 'error', msg: String(e && e.stack || e) }); }
+  busy = false;
+}
+
+self.onmessage = async ev => {
+  const m = ev.data;
+  try {
+    switch (m.type) {
+      case 'init': await init(m.env, m.autoplay); break;
+      case 'hold': hold = !!m.on; break;
+      case 'config': {
+        const prevG = cfg.ghost, prevGp = ghostOf(cfg), prevBc = cfg.actor, prevPol = cfg.policy; Object.assign(cfg, m.cfg);
+        const gp = ghostOf(cfg);
+        // a newly chosen blue policy starts from the orange run's current state
+        if (cfg.ghost && (!prevG || gp !== prevGp || (gp === 'bc' && cfg.actor !== prevBc))) { ghost.copyStateFrom(env); ghost.t = env.t; ghostPlan = []; ghostHistory = history.slice(); }
+        plan = cfg.policy !== prevPol ? [] : plan.slice(0, cfg.hexec);
+        break;
+      }
+      case 'task': await applyTask(m.k, m.restart !== undefined ? m.restart : env.ui.taskSwitch === 'restart'); break;
+      case 'goal':          // a clicked goal: labels from the environment's goal rule
+        env.setGoal(m.p); ghost.setGoal(m.p); env.taskIdx = null; ghost.taskIdx = null;
+        post({ type: 'goal_info', task: null, marker: env.marker(), ...(await labels()) });
+        await taskToBaselines();
+        if (m.restart) { episodeSeed += 1; newEpisode(); sendPoses(); } else newLeg();
+        break;
+      case 'start': env.setStart(m.p); ghost.setStart(m.p); episodeSeed += 1; newEpisode(); sendPoses(); break;
+      case 'reset': if (m.seed !== undefined) episodeSeed = m.seed; else if (m.newSeed !== false) episodeSeed += 1; newEpisode();
+        sendPoses();
+        if (m.play) { playing = true; loop(); }
+        break;
+      case 'play': if (env.done) { episodeSeed += 1; newEpisode(); } playing = true; wallStart = performance.now(); simStart = 0; loop(); break;
+      case 'pause': playing = false; status(); break;
+      case 'step': if (!env.done) { stepOnce = true; loop(); } break;
+      case 'speed': speed = m.speed; wallStart = performance.now(); simStart = 0; break;
+    }
+  } catch (e) { post({ type: 'error', msg: String(e && e.stack || e) }); }
+};

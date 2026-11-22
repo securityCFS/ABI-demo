@@ -1,0 +1,42 @@
+[
+ {
+  "name": "cube-single-play",
+  "label": "Cube, single (play)",
+  "title": "Cube",
+  "group": "OGBench",
+  "kind": "manipspace",
+  "sub": "ABI's critic was trained once, without rewards and without an actor. At test time it ranks or guides the action chunks of a frozen base policy so that the arm moves the cube to the target you place."
+ },
+ {
+  "name": "antmaze-medium-navigate",
+  "label": "AntMaze medium (navigate)",
+  "title": "AntMaze",
+  "group": "OGBench",
+  "kind": "locomaze",
+  "sub": "ABI's critic was trained once, without rewards and without an actor. At test time it ranks or guides the action chunks of a frozen base policy toward the goal you place."
+ },
+ {
+  "name": "dmc-quadruped",
+  "label": "Quadruped",
+  "title": "Quadruped",
+  "group": "DeepMind Control",
+  "kind": "dmc",
+  "sub": "ABI's critic was trained once, without rewards and without an actor. Switch the task at any time, also while the agent moves: ABI only reads the new reward labels of its reference states, nothing is retrained."
+ },
+ {
+  "name": "dmc-cheetah",
+  "label": "Cheetah",
+  "title": "Cheetah",
+  "group": "DeepMind Control",
+  "kind": "dmc",
+  "sub": "ABI's critic was trained once, without rewards and without an actor. Switch the task at any time, also while the agent moves: ABI only reads the new reward labels of its reference states, nothing is retrained."
+ },
+ {
+  "name": "dmc-walker",
+  "label": "Walker",
+  "title": "Walker",
+  "group": "DeepMind Control",
+  "kind": "dmc",
+  "sub": "ABI's critic was trained once, without rewards and without an actor. Switch the task at any time, also while the agent moves: ABI only reads the new reward labels of its reference states, nothing is retrained."
+ }
+]

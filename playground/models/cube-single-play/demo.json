@@ -1,0 +1,86 @@
+{
+ "sd": 28,
+ "ad": 5,
+ "chunk": 8,
+ "window": 16,
+ "flow_steps": 10,
+ "default_actor": "bcplus",
+ "actors": [
+  {
+   "id": "bcplus",
+   "label": "Flow BC",
+   "short": "Flow BC",
+   "propose": "flow_bcplus_propose.onnx",
+   "velocity": "flow_bcplus_velocity.onnx",
+   "note": "Behavior cloning of the offline data with a flow policy. It has no notion of the target."
+  }
+ ],
+ "critic": {
+  "score": "abi_score.onnx",
+  "grad": "abi_grad.onnx",
+  "R": 8046,
+  "ref_xyz": "ref_xyz.bin",
+  "labels": {
+   "1": "w_task1.bin",
+   "2": "w_task2.bin",
+   "3": "w_task3.bin",
+   "4": "w_task4.bin",
+   "5": "w_task5.bin"
+  }
+ },
+ "reward": {
+  "kind": "cube",
+  "radius": 0.04,
+  "strict": true,
+  "goal_z": 0.02,
+  "hit": 1,
+  "miss": 0,
+  "rule": "Env.goalLabels(refXYZ, goal) in js/envs/manipspace.js: 1[||ref_xyz_k - (x, y, 0.02)|| < 0.04]"
+ },
+ "qgf": {
+  "keep_dct": 3,
+  "gripper_dims": [
+   4
+  ]
+ },
+ "footer": "",
+ "task_alpha": {
+  "qgf": [
+   0.03,
+   0.03,
+   0.03,
+   0.03,
+   0.03
+  ],
+  "qgf_bfn": [
+   0.0,
+   0.03,
+   0.0,
+   0.03,
+   0.03
+  ]
+ },
+ "task_gripper": {
+  "qgf": [
+   "mask",
+   "mask",
+   "guide",
+   "mask",
+   "guide"
+  ],
+  "qgf_bfn": [
+   "mask",
+   "guide",
+   "mask",
+   "mask",
+   "mask"
+  ]
+ },
+ "gripper_rule": "\"mask\": zero the projected critic gradient on action dims gripper_dims before its norm; \"guide\": no mask. The step scale keeps sqrt(8 * ad).",
+ "click_alpha_rule": "a clicked target uses tau and gripper setting of the task whose goal is nearest (demo choice)",
+ "hexec": 1,
+ "env": "cube-single-play",
+ "guide_actors": [
+  "tdjepa"
+ ]
+}

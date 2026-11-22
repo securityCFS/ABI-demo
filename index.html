@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABI: Actor-Free Behavior-Induced Representations for Zero-Shot Test-Time Guidance</title>
+<meta name="description" content="ABI: actor-free behavior-induced representations for zero-shot test-time guidance. Project page with a video and an in-browser MuJoCo playground.">
+<link rel="icon" href="assets/abi_bear.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #fbfaf7; --surface: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e4e1d8; --accent: #4f8a10; --accent-2: #6aa81e;
+  --orange: #e8912a; --blue: #4a86e8; --chip: #eef3e4; --shadow: 0 1px 2px rgba(20,30,10,.06), 0 6px 24px rgba(20,30,10,.06);
+  --code: #f1efe8;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --surface: #1a1f28; --text: #e6e9ef; --muted: #a2abbb; --line: #2b323e; --accent: #9ccc4f; --accent-2: #b6dd72;
+    --chip: #233019; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 24px rgba(0,0,0,.25); --code: #232a35; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --surface: #1a1f28; --text: #e6e9ef; --muted: #a2abbb; --line: #2b323e; --accent: #9ccc4f; --accent-2: #b6dd72;
+  --chip: #233019; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 24px rgba(0,0,0,.25); --code: #232a35; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+.narrow { max-width: 820px; }
+a { color: var(--accent); }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; background: var(--code); padding: 0 4px; border-radius: 4px; }
+
+/* hero */
+.hero { padding: 56px 0 28px; text-align: center; }
+.hero h1 .nw { white-space: nowrap; }
+.hero img.logo { width: 64px; height: 72px; display: block; margin: 0 auto 14px; }
+.hero h1 { margin: 0 auto; max-width: 900px; font-size: clamp(28px, 4.2vw, 44px); line-height: 1.15; letter-spacing: -.01em; font-weight: 750; }
+.hero h1 .abbr { color: var(--accent); }
+.hero .venue { margin-top: 14px; color: var(--muted); font-size: 16px; }
+.btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 999px; text-decoration: none; font-weight: 650;
+  font-size: 16px; border: 1px solid var(--line); color: var(--text); background: var(--surface); box-shadow: var(--shadow); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #10150a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #10150a; } }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn svg { width: 18px; height: 18px; }
+
+/* video */
+.video { margin: 18px auto 0; }
+.video video { width: 100%; display: block; border-radius: 14px; background: #0f1218; box-shadow: var(--shadow); aspect-ratio: 16 / 9; }
+.video p { color: var(--muted); font-size: 14px; text-align: center; margin: 10px 0 0; }
+
+section { padding: 34px 0 6px; }
+h2 { font-size: 26px; margin: 0 0 14px; letter-spacing: -.005em; }
+h2 small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 8px; }
+p { margin: 0 0 14px; }
+.abstract p { text-align: justify; hyphens: auto; }
+
+/* playground cards */
+.pg-lead { color: var(--muted); margin-bottom: 18px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.card { display: block; text-decoration: none; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  overflow: hidden; box-shadow: var(--shadow); transition: transform .12s ease, border-color .12s ease; }
+.card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.card img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: #0f1218; }
+.card .body { padding: 10px 12px 12px; }
+.card .name { font-weight: 700; font-size: 16px; }
+.card .what { color: var(--muted); font-size: 14px; line-height: 1.45; margin-top: 2px; }
+.card .suite { font-size: 12px; color: var(--accent); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.pg-cta { margin: 20px 0 10px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.pg-note { color: var(--muted); font-size: 14px; }
+.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: 0; margin-right: 3px; }
+
+/* figures */
+figure { margin: 0 0 30px; }
+figure .img { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); }
+figure img { display: block; width: 100%; height: auto; }
+figure.half { max-width: 640px; margin-left: auto; margin-right: auto; }
+figcaption { font-size: 15px; color: var(--muted); margin-top: 10px; line-height: 1.55; }
+figcaption b { color: var(--text); }
+footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; text-align: center; border-top: 1px solid var(--line); margin-top: 30px; }
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  .wrap { padding: 0 16px; }
+  .hero { padding-top: 36px; }
+  figure .img { padding: 6px; }
+  .abstract p { text-align: left; }
+}
+</style>
+</head>
+<body>
+<header class="hero wrap">
+  <img class="logo" src="assets/abi_bear.svg" alt="">
+  <h1><span class="abbr">ABI</span>: Actor-Free Behavior-Induced Representations for Zero-Shot <span class="nw">Test-Time</span> Guidance</h1>
+  <div class="btns">
+    <a class="btn" href="#video"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Video</a>
+    <a class="btn primary" href="playground/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z" fill="currentColor"/></svg>Open the playground</a>
+    <a class="btn" href="#abstract">Abstract</a>
+  </div>
+</header>
+
+<div class="wrap video" id="video">
+  <video controls preload="metadata" playsinline poster="assets/abi_video_poster.jpg">
+    <source src="assets/abi_video.mp4" type="video/mp4">
+  </video>
+  <p>Example episodes recorded in the playground below. <span class="legend-dot" style="background:var(--orange)"></span>Orange: a frozen policy guided by ABI's critic. <span class="legend-dot" style="background:var(--blue)"></span>Blue: the same policy without ABI, from the same start.</p>
+</div>
+
+<section class="wrap narrow abstract" id="abstract">
+  <h2>Abstract</h2>
+  <p>Behavior-cloning policies show strong ability in sequential control by generating coherent multi-step action chunks, yet their purely imitative objective limits zero-shot generalization to unseen tasks. While offline reinforcement learning offers principled policy improvement, existing methods either require task-specific reward supervision or remain tied to a specific actor during critic training or policy deployment, inflating training cost and restricting cross-policy generalization. We observe that evaluating actions under the data-collecting behavior largely preserves their relative value ordering across target policies, offering a way around actor coupling. Combining this property with reward-free successor prediction, we propose Actor-Free Behavior-Induced Representations (ABI) to learn multi-horizon action-chunk representations from unlabeled trajectories without reward supervision or actor training. At test time, pairing the frozen representation with lightweight task readouts forms a chunk critic that guides target policies without parameter updates and transfers directly across distinct unseen policies. Our analysis establishes when the value ordering is preserved across policies and when selecting among proposed chunks improves closed-loop return. Across 65 locomotion, navigation, and manipulation tasks, ABI's chunk critic guides weak imitation policies to match or surpass zero-shot RL baselines with high sample efficiency, outperforms existing zero-shot critics on identical proposals, and improves externally trained RL actors without retraining. From raw pixels, ABI delivers substantial guidance gains and surpasses prior zero-shot RL baselines on visual manipulation, highlighting its potential for visuomotor control.</p>
+</section>
+
+<section class="wrap" id="playground">
+  <h2>Interactive playground</h2>
+  <p class="pg-lead">Choose a task, place a goal or switch the task while the agent moves, and watch ABI's critic guide a frozen policy. On Cube, the same critic also guides the trained actor of TD-JEPA. The physics (MuJoCo, WebAssembly) and all networks run in your browser, and nothing is sent anywhere. Each environment loads its own models (about 30 to 60 MB).</p>
+  <div class="cards">
+    <a class="card" href="playground/?env=cube-single-play"><img src="assets/thumb_cube.jpg" alt="Cube" loading="lazy"><div class="body"><div class="suite">OGBench</div><div class="name">Cube</div><div class="what">Click the table to set where the arm should put the cube.</div></div></a>
+    <a class="card" href="playground/?env=antmaze-medium-navigate"><img src="assets/thumb_antmaze.jpg" alt="AntMaze" loading="lazy"><div class="body"><div class="suite">OGBench</div><div class="name">AntMaze</div><div class="what">Click the floor to place a goal anywhere in the maze.</div></div></a>
+    <a class="card" href="playground/?env=dmc-quadruped"><img src="assets/thumb_quadruped.jpg" alt="Quadruped" loading="lazy"><div class="body"><div class="suite">DeepMind Control</div><div class="name">Quadruped</div><div class="what">Stand, walk, run or jump, switched while it moves.</div></div></a>
+    <a class="card" href="playground/?env=dmc-cheetah"><img src="assets/thumb_cheetah.jpg" alt="Cheetah" loading="lazy"><div class="body"><div class="suite">DeepMind Control</div><div class="name">Cheetah</div><div class="what">Walk or run, forward or backward.</div></div></a>
+    <a class="card" href="playground/?env=dmc-walker"><img src="assets/thumb_walker.jpg" alt="Walker" loading="lazy"><div class="body"><div class="suite">DeepMind Control</div><div class="name">Walker</div><div class="what">Stand, walk, run or spin.</div></div></a>
+  </div>
+  <div class="pg-cta">
+    <a class="btn primary" href="playground/">Open the playground</a>
+    <span class="pg-note">Works in recent Chrome, Edge, Firefox and Safari on a desktop or laptop.</span>
+  </div>
+</section>
+
+<section class="wrap" id="method">
+  <h2>Method</h2>
+  <figure>
+    <div class="img"><img src="assets/fig1_overview.png" alt="Overview of ABI: reward-free learning of a chunk representation, test-time control with a frozen critic, and summary results" width="2400" height="1036"></div>
+    <figcaption><b>ABI pretrains a reward- and actor-free chunk representation to guide frozen policies at test time.</b> <em>Left:</em> From unlabeled trajectories <i>D</i>, the predictor <i>T</i><sub>ϕ</sub> regresses discounted chunk arrivals and EMA targets without rewards or an actor. At test time, a task readout on cached states forms a zero-update chunk critic <i>Ĵ</i>(<i>s</i>, <b><i>a</i></b>; <i>z</i>) to guide policies via gradient guidance (Guide) or candidate selection (Rank). <em>Right:</em> ABI guides frozen Flow BC to match or surpass trained-actor baselines on state suites and visual manipulation, reaches reproduced TD-JEPA's DMC return with 24× fewer samples, and reuses one frozen critic across distinct unseen policies.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="results">
+  <h2>Results</h2>
+  <figure>
+    <div class="img"><img src="assets/fig2_qualitative.png" alt="Zero-shot value landscape on antmaze and same-start rollouts on quadruped, cube and scene" width="2400" height="794" loading="lazy"></div>
+    <figcaption><b>ABI shapes goal-directed value landscapes and guides closed-loop rollouts.</b> <em>Left:</em> On <code>antmaze-mn</code>, the zero-shot score <i>Ĵ</i><sub>D</sub>(<i>s</i>, <b><i>a</i></b>) over recorded state–chunk pairs rises along the corridor toward an unseen goal. Unguided Flow BC stalls in a dead end, whereas ABI guides it to the goal. <em>Right:</em> From identical initial states, ABI guidance keeps <code>quadruped</code> upright, places the block at the goal on <code>cube-single</code>, and opens both the drawer and the window on <code>scene</code>. Rollouts use BFN16 with <i>H</i><sub>exec</sub>=8.</figcaption>
+  </figure>
+  <figure>
+    <div class="img"><img src="assets/fig3_nsweep.png" alt="Return and success against the number of candidates N for ABI and TD-JEPA critics" width="2200" height="423" loading="lazy"></div>
+    <figcaption><b>Under whole-chunk execution (<i>H</i><sub>exec</sub>=8), candidate scaling requires a chunk-level critic.</b> Best-of-<i>N</i> selection over 8-step frozen Flow BC proposals executed open loop. Because TD-JEPA's single-step critic cannot evaluate multi-step action sequences, it gains little from larger <i>N</i>: on DMC, ABI at <i>N</i>=2 already exceeds TD-JEPA at <i>N</i>=32.</figcaption>
+  </figure>
+  <figure class="half">
+    <div class="img"><img src="assets/fig5_pixel_focus.png" alt="Occlusion sensitivity maps of the pixel critic on the visual scene task" width="1400" height="591" loading="lazy"></div>
+    <figcaption><b>Pretraining grounds the representation in manipulable objects, and each task readout shifts sensitivity to its target object.</b> Occlusion sensitivity on visual <code>scene</code> for the pixel critic.</figcaption>
+  </figure>
+</section>
+
+<footer class="wrap">The playground runs MuJoCo and all networks in your browser. Nothing is sent anywhere.</footer>
+</body>
+</html>

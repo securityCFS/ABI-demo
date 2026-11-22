@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64.53" height="71.90" viewBox="137.0 73.5 968.0 1078.5" role="img" aria-labelledby="title desc">
+  <title id="title">ABI bear</title>
+  <desc id="desc">Coral teddy bear head with stitched forehead, shaded inner ears and a golden bow. Editable vector artwork on a transparent background.</desc>
+  <defs>
+    <linearGradient id="ear" x1="0" y1="0" x2="0.8" y2="1">
+      <stop stop-color="#C65D50"/>
+      <stop offset="1" stop-color="#E87964"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#641D19" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Ears and subtle inner-ear gradients -->
+    <g fill="#EF7C68" stroke-width="42">
+      <ellipse cx="424" cy="274" rx="167" ry="176" transform="rotate(-18 424 274)"/>
+      <ellipse cx="910" cy="417" rx="168" ry="181" transform="rotate(22 910 417)"/>
+    </g>
+    <g fill="url(#ear)" stroke="none">
+      <ellipse cx="420" cy="286" rx="110" ry="108" transform="rotate(-18 420 286)"/>
+      <ellipse cx="906" cy="422" rx="107" ry="114" transform="rotate(22 906 422)"/>
+    </g>
+    <!-- Head; the short open contour lets the right ear join naturally -->
+    <path fill="#EF7C68" stroke="none" d="M754 373C620 286 481 279 364 350C271 399 210 483 180 574C137 706 175 824 261 903C335 971 456 1009 566 1007C737 1001 849 915 906 799C948 706 929 592 883 500C868 470 850 447 831 429Z"/>
+    <path fill="none" stroke-width="42" d="M754 373C620 286 481 279 364 350C271 399 210 483 180 574C137 706 175 824 261 903C335 971 456 1009 566 1007C737 1001 849 915 906 799C948 706 929 592 883 500C868 470 850 447 831 429"/>
+    <!-- Cross stitch and the curved row of sewing stitches -->
+    <path fill="none" stroke-width="20" d="M376 414L438 488M445 415L359 489"/>
+    <path fill="none" stroke-width="12" stroke-dasharray="24 34" d="M475 451C579 391 692 373 790 417"/>
+    <!-- Nose, embroidered mouth and button eye -->
+    <g fill="#641D19" stroke="none">
+      <ellipse cx="366" cy="607" rx="59" ry="40" transform="rotate(-4 366 607)"/>
+      <ellipse cx="687" cy="635" rx="57" ry="59"/>
+    </g>
+    <path fill="none" stroke-width="20" d="M365 640L354 689M310 731L354 689L402 733"/>
+    <!-- Bow lobes, creases and central knot -->
+    <g fill="#F4C354" stroke-width="34">
+      <path d="M526 949C471 891 415 865 374 880C326 891 296 950 294 1016C289 1092 329 1136 383 1130C429 1127 484 1095 529 1052Z"/>
+      <path d="M594 949C649 891 705 865 746 880C794 891 824 950 826 1016C831 1092 791 1136 737 1130C691 1127 636 1095 591 1052Z"/>
+    </g>
+    <g fill="#641D19" stroke="none">
+      <path d="M520 1005C480 992 447 980 417 984C394 985 391 1011 414 1013C447 1007 484 1009 520 1022Z"/>
+      <path d="M600 1005C640 992 673 980 703 984C726 985 729 1011 706 1013C673 1007 636 1009 600 1022Z"/>
+    </g>
+    <path fill="#F4C354" stroke-width="26" d="M537 950C549 945 574 945 585 952C603 963 604 1037 588 1056C577 1068 544 1068 532 1057C516 1041 516 964 537 950Z"/>
+  </g>
+</svg>

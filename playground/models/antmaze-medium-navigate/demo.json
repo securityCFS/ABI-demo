@@ -1,0 +1,56 @@
+{
+ "sd": 29,
+ "ad": 8,
+ "chunk": 8,
+ "window": 16,
+ "flow_steps": 10,
+ "default_actor": "bcplus",
+ "actors": [
+  {
+   "id": "bcplus",
+   "label": "Flow BC",
+   "short": "Flow BC",
+   "propose": "flow_bcplus_propose.onnx",
+   "velocity": "flow_bcplus_velocity.onnx",
+   "note": "Behavior cloning of the offline data with a flow policy. It has no notion of the goal."
+  },
+  {
+   "id": "bc",
+   "label": "Flow BC, smaller",
+   "short": "Flow BC (smaller)",
+   "propose": "flow_bc_propose.onnx",
+   "velocity": "flow_bc_velocity.onnx",
+   "note": "A smaller behavior-cloning policy. The same critic guides it without any retraining."
+  }
+ ],
+ "critic": {
+  "score": "abi_score.onnx",
+  "grad": "abi_grad.onnx",
+  "ref_xy": "ref_xy.bin"
+ },
+ "reward": {
+  "radius": 0.5,
+  "hit": 1,
+  "miss": 0
+ },
+ "qgf": {
+  "keep_dct": 3
+ },
+ "footer": "",
+ "task_alpha": {
+  "qgf": [
+   0.1,
+   0.03,
+   0.03,
+   0.1,
+   0.03
+  ],
+  "qgf_bfn": [
+   0.0,
+   0.03,
+   0.3,
+   0.03,
+   0.03
+  ]
+ }
+}

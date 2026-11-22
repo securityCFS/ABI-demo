@@ -1,0 +1,612 @@
+{
+ "dataset": "cube-single-play-v0",
+ "training_seed": 3917,
+ "sd": 28,
+ "ad": 5,
+ "R": 8046,
+ "chunk_len": 8,
+ "history_len": 16,
+ "flow_steps": 10,
+ "action_clip": [
+  -1.0,
+  1.0
+ ],
+ "episode_limit": 200,
+ "control_dt": 0.05,
+ "gripper_dims": [
+  4
+ ],
+ "critic": {
+  "row": "w0 (critic trained with w_N = 0), density readout m_D (rule S: cube-single-play-v0 -> w0_13 -> rev1 row w0)",
+  "temperature": 1.0,
+  "heads": 2,
+  "head_combination": "mean of the 2 heads before the softmax",
+  "score": "softmax_k(mean_heads F(window, chunk) . B_ref_k / T) . w",
+  "H_score": 8,
+  "query": 256,
+  "history": 16,
+  "horizon_mode": "infinite",
+  "latent_geometry": "none",
+  "arm": "proprio_cross",
+  "input_schema": "state_v1",
+  "note": "scores are probability-weighted sums of w (in [0, 1] for 0/1 labels); only their argmax/gradient is used",
+  "action_tokens": "The model pads each 8-step chunk to 32 action steps and masks the padding. These graphs feed the 8 chunk steps only (trunc check: max rel. diff 1.5e-05 vs 32 tokens, argmax identical on 20 windows x 64 candidates)."
+ },
+ "reward_rule": {
+  "w_k": "1 if ||ref_xyz_k - goal_xyz||_2 < 0.04 else 0 (strict <, 3-D, goal z = 0.02)",
+  "threshold": 0.04,
+  "strict": true,
+  "goal_z": 0.02,
+  "source": "OGBench cube relabelling of the offline data (reward = #cubes at target - #cubes, on the arrival state), +1 shift; the environment's own success test uses <= 0.04",
+  "discounting": "none (per-state label of the arrival state s')",
+  "reproduces_paper_labels": "max abs diff 0 on all 5 tasks (float64 rule, float32 inputs with float64 distance as in the browser, and pure float32)",
+  "clickable_goals": "any target (x, y) on the table: w = goalLabels(ref_xyz, (x, y, 0.02)); the 5 task labels are this rule at the task goals"
+ },
+ "history_rule": {
+  "contents": "raw observations (flatten_obs, float32), oldest first, current observation LAST",
+  "deque": "maxlen 16; starts as [obs_after_reset]; append the new observation after every env.step",
+  "window": "history[16, sd] = last min(len,16) observations right-aligned, zero rows on the left; history_valid[16] = 1 on filled rows, 0 on padded rows",
+  "at_reset": "len 1: only row 15 valid"
+ },
+ "noise": {
+  "paper": "torch.Generator(device).manual_seed(reset_seed + 17001); one torch.randn((N, 8, ad)) per replan, sequential stream over the episode (device = cuda in the paper; CPU and CUDA streams differ)",
+  "qgf_bfn4u_unguided": "second generator manual_seed(reset_seed + 27001), torch.randn((1, 8, ad)) per replan",
+  "browser": "any N(0, 1) float32 noise of shape [N, 8, ad]; bit-exact paper streams are not reproducible in JS"
+ },
+ "sampler": {
+  "time_grid": [
+   0.0,
+   0.1,
+   0.2,
+   0.3,
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.8,
+   0.9
+  ],
+  "update": "x <- x + v(s, x, t_i) / 10 (float32 division by 10)",
+  "output": "clip(x, -1, 1) after the 10th step",
+  "t_input": "flow time t_i as float32 [1]"
+ },
+ "protocols": {
+  "bfn16_hexec1": {
+   "N": 16,
+   "H_plan": 8,
+   "H_score": 8,
+   "H_exec": 1,
+   "replan": "every env step",
+   "select": "argmax scores",
+   "note": "the paper's main cube protocol (Tab. 1)"
+  },
+  "base_hexec1": {
+   "N": 1,
+   "H_exec": 1,
+   "select": "the single Flow BC+ draw"
+  },
+  "qgf_n1_hexec1": {
+   "N": 1,
+   "H_exec": 1,
+   "tau": "per task, qgf_n1",
+   "gripper": "per task, qgf_n1"
+  },
+  "qgf_bfn4u_hexec1": {
+   "N": "4 QGF draws (tau and gripper per task, qgf_bfn4u) + 1 unguided draw",
+   "H_exec": 1,
+   "select": "argmax scores over 5"
+  }
+ },
+ "qgf": {
+  "keep_dct": 3,
+  "gripper_dims": [
+   4
+  ],
+  "lowpass_8x8": [
+   [
+    0.5788732767105103,
+    0.41726163029670715,
+    0.17283540964126587,
+    -0.04055296629667282,
+    -0.13622376322746277,
+    -0.09961208701133728,
+    0.009515078738331795,
+    0.09790340065956116
+   ],
+   [
+    0.41726163029670715,
+    0.33444708585739136,
+    0.20387326180934906,
+    0.07716453820466995,
+    -0.003941278904676437,
+    -0.027096599340438843,
+    -0.011223775334656239,
+    0.009515057317912579
+   ],
+   [
+    0.17283540964126587,
+    0.20387326180934906,
+    0.23877620697021484,
+    0.24048493802547455,
+    0.18629175424575806,
+    0.08444704115390778,
+    -0.027096616104245186,
+    -0.09961213916540146
+   ],
+   [
+    -0.04055296629667282,
+    0.07716453820466995,
+    0.24048493802547455,
+    0.34790343046188354,
+    0.32887330651283264,
+    0.18629169464111328,
+    -0.003941296134144068,
+    -0.13622379302978516
+   ],
+   [
+    -0.13622376322746277,
+    -0.003941278904676437,
+    0.18629175424575806,
+    0.32887330651283264,
+    0.34790337085723877,
+    0.24048487842082977,
+    0.07716453820466995,
+    -0.04055292531847954
+   ],
+   [
+    -0.09961208701133728,
+    -0.027096599340438843,
+    0.08444704115390778,
+    0.18629169464111328,
+    0.24048487842082977,
+    0.23877619206905365,
+    0.20387335121631622,
+    0.17283551394939423
+   ],
+   [
+    0.009515078738331795,
+    -0.011223775334656239,
+    -0.027096616104245186,
+    -0.003941296134144068,
+    0.07716453820466995,
+    0.20387335121631622,
+    0.33444711565971375,
+    0.41726168990135193
+   ],
+   [
+    0.09790340065956116,
+    0.009515057317912579,
+    -0.09961213916540146,
+    -0.13622379302978516,
+    -0.04055292531847954,
+    0.17283551394939423,
+    0.41726168990135193,
+    0.578873336315155
+   ]
+  ],
+  "step": "endpoint=clip(x+(1-t)v,-1,1); g=grad(endpoint); pg=(P@g over the time axis)*mask; x <- x + v/10 + tau*sqrt(8*ad)*pg/max(||pg||_F,1e-12); tau=0 -> unguided step",
+  "gripper_rule": "per task and consumer: \"mask\" sets mask[4] = 0 (the gripper action dimension gets no guidance push), \"guide\" keeps mask = 1. ||pg||_F is taken AFTER masking; the factor sqrt(8*ad) = sqrt(40) keeps the masked dimension in the count (state_qgf.GuidedFlow: math.sqrt(pg[0].numel())). The flow velocity still moves the gripper dimension; only the guidance push is masked."
+ },
+ "tasks": [
+  {
+   "id": 1,
+   "name": "cube-single-play-singletask-task1-v0",
+   "task_name": "task1_horizontal",
+   "goal_xyz": [
+    0.425,
+    -0.1,
+    0.02
+   ],
+   "init_xyz_nominal": [
+    0.425,
+    0.1,
+    0.02
+   ],
+   "labels": "w_task1.bin",
+   "reward_positives_on_reference": 164,
+   "label_rule_min_margin": 1.5034155506750413e-05,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.0
+   },
+   "qgf_gripper": {
+    "qgf_n1": "mask",
+    "qgf_bfn4u": "mask"
+   }
+  },
+  {
+   "id": 2,
+   "name": "cube-single-play-singletask-task2-v0",
+   "task_name": "task2_vertical1",
+   "goal_xyz": [
+    0.5,
+    0.0,
+    0.02
+   ],
+   "init_xyz_nominal": [
+    0.35,
+    0.0,
+    0.02
+   ],
+   "labels": "w_task2.bin",
+   "reward_positives_on_reference": 179,
+   "label_rule_min_margin": 0.00016726001659202877,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.03
+   },
+   "qgf_gripper": {
+    "qgf_n1": "mask",
+    "qgf_bfn4u": "guide"
+   }
+  },
+  {
+   "id": 3,
+   "name": "cube-single-play-singletask-task3-v0",
+   "task_name": "task3_vertical2",
+   "goal_xyz": [
+    0.35,
+    0.0,
+    0.02
+   ],
+   "init_xyz_nominal": [
+    0.5,
+    0.0,
+    0.02
+   ],
+   "labels": "w_task3.bin",
+   "reward_positives_on_reference": 197,
+   "label_rule_min_margin": 4.58594571440471e-05,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.0
+   },
+   "qgf_gripper": {
+    "qgf_n1": "guide",
+    "qgf_bfn4u": "mask"
+   }
+  },
+  {
+   "id": 4,
+   "name": "cube-single-play-singletask-task4-v0",
+   "task_name": "task4_diagonal1",
+   "goal_xyz": [
+    0.5,
+    0.2,
+    0.02
+   ],
+   "init_xyz_nominal": [
+    0.35,
+    -0.2,
+    0.02
+   ],
+   "labels": "w_task4.bin",
+   "reward_positives_on_reference": 214,
+   "label_rule_min_margin": 5.517385968149824e-06,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.03
+   },
+   "qgf_gripper": {
+    "qgf_n1": "mask",
+    "qgf_bfn4u": "mask"
+   }
+  },
+  {
+   "id": 5,
+   "name": "cube-single-play-singletask-task5-v0",
+   "task_name": "task5_diagonal2",
+   "goal_xyz": [
+    0.5,
+    -0.2,
+    0.02
+   ],
+   "init_xyz_nominal": [
+    0.35,
+    0.2,
+    0.02
+   ],
+   "labels": "w_task5.bin",
+   "reward_positives_on_reference": 173,
+   "label_rule_min_margin": 1.551709492708664e-05,
+   "qgf_tau": {
+    "qgf_n1": 0.03,
+    "qgf_bfn4u": 0.03
+   },
+   "qgf_gripper": {
+    "qgf_n1": "guide",
+    "qgf_bfn4u": "mask"
+   }
+  }
+ ],
+ "files": {
+  "abi_grad.onnx": {
+   "bytes": 26716516,
+   "sha256": "717e3e03eac7025fd5a4389e556479c7d68795fb3872d107c4ccc3e6466c90e0",
+   "opset": 18,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      28
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      5
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      8046
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "grad",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      5
+     ]
+    }
+   ]
+  },
+  "abi_score.onnx": {
+   "bytes": 26719382,
+   "sha256": "80eab632cde1cd416d4fa80ef6a7147ffdd7ce557dcef55b8c5cede109fe634e",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "history",
+     "dtype": "float32",
+     "shape": [
+      16,
+      28
+     ]
+    },
+    {
+     "name": "history_valid",
+     "dtype": "float32",
+     "shape": [
+      16
+     ]
+    },
+    {
+     "name": "candidates",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      5
+     ]
+    },
+    {
+     "name": "w",
+     "dtype": "float32",
+     "shape": [
+      8046
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "scores",
+     "dtype": "float32",
+     "shape": [
+      "N"
+     ]
+    }
+   ]
+  },
+  "flow_bcplus_propose.onnx": {
+   "bytes": 3456278,
+   "sha256": "99ec67645e0860e297047d8faa0e66eaec400cce5700ed80f87905e54a573be7",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      28
+     ]
+    },
+    {
+     "name": "noise",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      5
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "actions",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      5
+     ]
+    }
+   ]
+  },
+  "flow_bcplus_velocity.onnx": {
+   "bytes": 3402836,
+   "sha256": "c845c9257ae6fd65af41193583589164378b2c296e0646381c4b5b33ad65f851",
+   "opset": 17,
+   "inputs": [
+    {
+     "name": "state",
+     "dtype": "float32",
+     "shape": [
+      28
+     ]
+    },
+    {
+     "name": "x_t",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      5
+     ]
+    },
+    {
+     "name": "t",
+     "dtype": "float32",
+     "shape": [
+      1
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "velocity",
+     "dtype": "float32",
+     "shape": [
+      "N",
+      8,
+      5
+     ]
+    }
+   ]
+  },
+  "ref_xyz.bin": {
+   "bytes": 96552,
+   "sha256": "a98c08d8ec888a8c2a2697a8436096ac7b03e637bc9fe9bb9e9579ebe6224697",
+   "dtype": "float32",
+   "shape": [
+    8046,
+    3
+   ],
+   "layout": "row-major [x0, y0, z0, x1, ...]: cube position of each reference (arrival) state, order of b_ref"
+  },
+  "w_task1.bin": {
+   "bytes": 32184,
+   "sha256": "453ec74ec93b4559e7eac02ca77c8d09c4c0c646e01dc377dfaad86d20eddd36",
+   "dtype": "float32",
+   "shape": [
+    8046
+   ],
+   "content": "reward labels of task 1"
+  },
+  "w_task2.bin": {
+   "bytes": 32184,
+   "sha256": "ca5b841ff7752e7016f043156079205eee5f5bbc7037de74e4eea1fbaee59a4e",
+   "dtype": "float32",
+   "shape": [
+    8046
+   ],
+   "content": "reward labels of task 2"
+  },
+  "w_task3.bin": {
+   "bytes": 32184,
+   "sha256": "a98ba713d4c8601b3aeb1124d99c06960e016e3f2f1734598a75ee4eb1aa1a3d",
+   "dtype": "float32",
+   "shape": [
+    8046
+   ],
+   "content": "reward labels of task 3"
+  },
+  "w_task4.bin": {
+   "bytes": 32184,
+   "sha256": "c36060a32344b8f8bdd9b9b60686ddea5dfbcb496d300d105e3fa322c5180e91",
+   "dtype": "float32",
+   "shape": [
+    8046
+   ],
+   "content": "reward labels of task 4"
+  },
+  "w_task5.bin": {
+   "bytes": 32184,
+   "sha256": "dc20a31590c0faa35e5af6eba504a5d3534582da173da7d6797b13543888850f",
+   "dtype": "float32",
+   "shape": [
+    8046
+   ],
+   "content": "reward labels of task 5"
+  }
+ },
+ "paper_seed3917": {
+  "note": "D8 cells (H_exec 1), MuJoCo 3.3.7, CUDA with bf16 autocast; success % per task over resets 40000-40019",
+  "table1_mean_over_3_seeds": {
+   "unguided": 11.0,
+   "abi_bfn16": 77.3,
+   "qgf": 49.0,
+   "qgf_bfn4u": 56.3
+  },
+  "bfn16_hexec1": {
+   "mean": 73.0,
+   "per_task": [
+    60.0,
+    90.0,
+    65.0,
+    70.0,
+    80.0
+   ],
+   "episodes": 100,
+   "resets": "40000-40019 (20 per task)",
+   "source": "d8_hexec1/abi/test/cube-single-play-v0__s3917__h1__n16/result.json"
+  },
+  "base_hexec1": {
+   "mean": 9.0,
+   "per_task": [
+    5.0,
+    5.0,
+    20.0,
+    5.0,
+    10.0
+   ],
+   "episodes": 100,
+   "resets": "40000-40019 (20 per task)",
+   "source": "d8_hexec1/base/test/cube-single-play-v0__s3917__h1__n1/result.json"
+  },
+  "qgf_n1_hexec1": {
+   "mean": 47.0,
+   "per_task": [
+    50.0,
+    60.0,
+    35.0,
+    35.0,
+    55.00000000000001
+   ],
+   "episodes": 100,
+   "resets": "40000-40019 (20 per task)",
+   "source": "d8_qgf/qgf/r40000/test/cube-single-play-v0__s3917__h1/result.json"
+  },
+  "qgf_bfn4u_hexec1": {
+   "mean": 57.0,
+   "per_task": [
+    50.0,
+    40.0,
+    70.0,
+    60.0,
+    65.0
+   ],
+   "episodes": 100,
+   "resets": "40000-40019 (20 per task)",
+   "source": "d8_qgf/qgf_bfn4u/r40000/test/cube-single-play-v0__s3917__h1/result.json"
+  }
+ },
+ "env": "cube-single-play"
+}
