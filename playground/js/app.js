@@ -434,7 +434,8 @@ function showIntro() {
 // Video capture: each call of __cap.frame() shows the next 1/30 s × cspeed of simulated time and returns the
 // frame (canvas plus caption, legend and banner) as a JPEG data URL, or null while the worker is behind.
 function setupCapture() {
-  document.body.classList.add('capture');
+  // ?capture&ui keeps the page's UI (the recorder takes page screenshots), otherwise only the 3-D view is captured
+  if (!params.has('ui')) document.body.classList.add('capture');
   if (view.clickArea) view.clickArea.visible = false;      // the clickable-area marking is a UI aid, not part of the scene
   speed = 0; worker.postMessage({ type: 'speed', speed: 0 });
   const out = document.createElement('canvas'), g = out.getContext('2d');
@@ -447,7 +448,7 @@ function setupCapture() {
     for (const [t, px, wt, col] of lines) { g.font = font(px * s, wt); g.fillStyle = col || '#e6e9ef'; g.textBaseline = 'top'; g.fillText(t, x + 14 * s, yy + px * s * 0.12); yy += px * s * 1.35; }
   }
   window.__cap = {
-    caption: null, legend: null, ended: null,
+    caption: null, legend: null, ended: null, clean: false, ui: params.has('ui'),   // clean: no overlays on the frame
     post: m => worker.postMessage(m), banner: (t, c, ms) => banner(t, c, ms), status: null,
     state: () => ({ queue: queue.length, playing, held, capFrame }),
     frame() {
@@ -459,9 +460,11 @@ function setupCapture() {
       if (!queue.length) cursor = 0;
       if (held && queue.length < 60) { held = false; worker.postMessage({ type: 'hold', on: false }); }
       view.render(); capFrame++;
+      if (window.__cap.ui) return true;
       const W = view.canvas.width, H = view.canvas.height, s = H / 720;
       if (out.width !== W || out.height !== H) { out.width = W; out.height = H; }
       g.drawImage(view.canvas, 0, 0);
+      if (window.__cap.clean) return out.toDataURL('image/jpeg', 0.92);
       const c = window.__cap.caption;
       if (c) pill(24 * s, 22 * s, [[c.title, 28, 700], ...(c.sub ? [[c.sub, 19, 400, '#c5ccd8']] : [])], s);
       const lg = window.__cap.legend || [orangeName(), ghostName()];

@@ -11,18 +11,22 @@ let mj, env, ghost, guide, meta, envMeta, modelDir;
 let cfg = { actor: null, policy: null, mode: 'bfn', N: 16, alpha: 0.1, hexec: 1, ghost: true, ghostPolicy: 'same' };
 let hold = false;     // video capture: the page asks the simulation to wait while its frame queue is long
 let baselineSpecs = [], baselineMods = new Map(), ZActor = null;
-let speed = 1, playing = false, busy = false, stepOnce = false, epoch = 0;
+let speed = 1, playing = false, busy = false, stepOnce = false, epoch = 0, leg = 0;   // leg: bumped by every goal or task change
 let episodeSeed = 1, rngMain, rngGhost, rngReset, ownMain, ownGhost, rngActor;
 let plan = [], ghostPlan = [], history = [], ghostHistory = [];
 let wallStart = 0, simStart = 0, recentMs = [], DT = 0.1, frameEvery = 1, EnvClass = null, settingTask = 0, envMod = null;
 let refFeatures = null;
-const labelCache = new Map();
+const labelCache = new Map();    // label file -> promise of its Float32Array (prefetched after start-up)
+const labelFile = f => { if (!labelCache.has(f)) labelCache.set(f, fetchBytes(new URL(f, modelDir)).then(f32)); return labelCache.get(f); };
 // The simulation runs ahead of the display by a lead that covers the slowest recent decision, so the
 // display plays at an even pace while a decision is computed.
 const leadMs = () => Math.min(1500, Math.max(250, 1.3 * Math.max(0, ...recentMs) + 80));
 
 const post = (m, t) => self.postMessage(m, t || []);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Let queued messages (pause, task, goal, settings) run. Awaiting ONNX inference only resolves microtasks, so a
+// simulation that runs behind the wall clock would otherwise never hand the thread back until its episode ends.
+const yieldTask = () => new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
 const fetchText = async p => { const r = await fetch(p); if (!r.ok) throw new Error(`${p}: ${r.status}`); return r.text(); };
 const fetchJSON = async p => JSON.parse(await fetchText(p));
 const fetchBytes = async p => { const r = await fetch(p); if (!r.ok) throw new Error(`${p}: ${r.status}`); return new Uint8Array(await r.arrayBuffer()); };
@@ -66,6 +70,9 @@ async function init(name, autoplay) {
          baselines: baselineSpecs.map(b => ({ id: b.id, label: b.label, short: b.short, note: b.note })) });
   await applyTask(0, true);
   if (autoplay) { playing = true; wallStart = performance.now(); simStart = 0; loop(); }
+  // fetch the other tasks' label files in the background, so that a task switch answers at once
+  for (const f of Object.values(meta.critic.labels || {})) labelFile(f).catch(() => labelCache.delete(f));
+  if (EnvClass.goalLabels && meta.critic.ref_xyz) refPointsFile().catch(() => {});      // first clicked goal
 }
 
 // Defaults for the optional parts of the environment interface (ENV_INTERFACE.md lists the required ones).
@@ -108,15 +115,16 @@ async function taskToBaseline(za) {
 async function taskToBaselines() { for (const za of baselineMods.values()) await taskToBaseline(za); }
 
 const f32 = b => new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4).slice();
-let refPoints = null;
+let refPoints = null, refPointsP = null;
+const refPointsFile = () => (refPointsP ||= fetchBytes(new URL(meta.critic.ref_xyz, modelDir)).then(f32).catch(e => { refPointsP = null; throw e; }));
 // Reward labels of the reference states for the current task or goal.
 async function labels() {
   const L = meta.critic.labels, k = env.taskIdx, t = k !== null ? envMeta.tasks[k] : null;
   const f = L && t ? (L[t.id] || L[String(k + 1)] || L[k]) : null;
   settingTask = k;
   if (f) {
-    if (!labelCache.has(f)) labelCache.set(f, f32(await fetchBytes(new URL(f, modelDir))));
-    return { ...guide.setW(labelCache.get(f)), mask: null, settingTask, meanLabel: mean(labelCache.get(f)) };
+    const w = await labelFile(f);
+    return { ...guide.setW(w), mask: null, settingTask, meanLabel: mean(w) };
   }
   // A knob value (DMC): the task's reward at every reference state, from the stored reward features; the QGF tau
   // is that of the nearest preset of the same family (meta.knob_alpha_rule).
@@ -129,7 +137,7 @@ async function labels() {
   // A clicked goal. Objects (cube): the environment's 3-D goal rule on the reference object positions; the QGF
   // settings are those of the nearest task (meta.click_alpha_rule). The ant: the guide's 2-D rule on the torso positions.
   if (EnvClass.goalLabels && meta.critic.ref_xyz) {
-    if (!refPoints) refPoints = f32(await fetchBytes(new URL(meta.critic.ref_xyz, modelDir)));
+    if (!refPoints) refPoints = await refPointsFile();
     const w = Float32Array.from(EnvClass.goalLabels(refPoints, env.goal));
     if (meta.click_alpha_rule) {
       let best = Infinity;
@@ -171,7 +179,7 @@ async function applyTask(k, restart) {
 }
 
 function newLeg() {           // continue from the current state under the new task or goal, with a fresh budget
-  env.newLeg(); ghost.newLeg(); plan = []; ghostPlan = [];
+  leg += 1; env.newLeg(); ghost.newLeg(); plan = []; ghostPlan = [];
   post({ type: 'leg_start', marker: env.marker(), task: env.taskIdx, knob: env.knobTask || null }); status();
 }
 
@@ -223,7 +231,7 @@ function ghostOf(c) {
 }
 
 async function tick() {
-  const myEpoch = epoch, t0 = performance.now();
+  const myEpoch = epoch, myLeg = leg, t0 = performance.now();
   let decision = null;
   if (!env.done && plan.length === 0) {
     let d;
@@ -235,7 +243,7 @@ async function tick() {
       d = cfg.mode === 'unguided' ? { actions: [own], scores: null, chosen: 0, N: 1, mode: 'unguided', ms: performance.now() - t0 }
         : await guide.decideActor(await za.candidates(obs, own, rngActor, 16), obs, history, rngActor);
     } else d = await guide.decide({ ...cfg, maskDims: qgfMask() }, env.obs(), history, rngMain);
-    if (myEpoch !== epoch) return;
+    if (myEpoch !== epoch || myLeg !== leg) { await yieldTask(); return; }   // the goal or task changed meanwhile: decide again
     plan = d.actions.slice(0, cfg.hexec); decision = d;
   }
   if (cfg.ghost && !ghost.done && ghostPlan.length === 0) {
@@ -246,7 +254,7 @@ async function tick() {
       ghostPlan = [await za.ownAction(ghost.obs(), ownGhost)];
     } else {
       const d = await guide.decide({ ...cfg, mode: 'unguided', N: 1 }, ghost.obs(), ghostHistory, rngGhost);
-      if (myEpoch !== epoch) return;
+      if (myEpoch !== epoch || myLeg !== leg) { await yieldTask(); return; }
       ghostPlan = d.actions.slice(0, cfg.hexec);
     }
   }
@@ -269,12 +277,12 @@ async function tick() {
   }
   while (hold && playing && myEpoch === epoch) await sleep(15);
   // pace to wall clock (speed 0 = as fast as possible, but yield so that messages such as pause get through)
-  if (speed === 0) await sleep(0);
+  if (speed === 0) await yieldTask();
   if (speed > 0) {
     simStart += DT;
     const target = wallStart + 1000 * simStart / speed - leadMs(), now = performance.now();
     if (target > now) await sleep(target - now);
-    else if (now - target > 2000) { wallStart = now; simStart = 0; }
+    else { if (now - target > 2000) { wallStart = now; simStart = 0; } await yieldTask(); }   // behind the clock: still yield
   }
 }
 
