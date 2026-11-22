@@ -40,7 +40,7 @@ const fetchJSON = async p => JSON.parse(await fetchText(p));
 const STALL_TICKS = 20, TRIES = 4;
 const ROOT = new URL('../', import.meta.url);
 const ahead = new Map();          // URL -> promise of its bytes, requested ahead of use and handed out once
-const bar = { got: 0, total: 0, open: 0, t0: 0, shown: 0, label: '', stage: '', note: '' };   // downloads the user waits for
+const bar = { got: 0, total: 0, open: 0, shown: 0, label: '', stage: '', note: '', hist: [] };   // downloads the user waits for
 let sizes = {};
 const running = new Set();       // AbortControllers of the open downloads
 let idle = 0, watch = 0;         // free seconds of this thread without a byte on any download
@@ -56,10 +56,15 @@ function report(force) {
   bar.shown = now;
   let msg = bar.stage;
   if (bar.open > 0) {
-    const mb = x => (x / 1e6).toFixed(1), sec = (now - bar.t0) / 1000, total = Math.max(bar.total, bar.got);
+    const mb = x => (x / 1e6).toFixed(1), total = Math.max(bar.total, bar.got);
     msg = `${bar.label}: ${mb(bar.got)} of ${mb(total)} MB`;
-    if (sec > 4 && bar.got > 0) {
-      const left = (total - bar.got) / (bar.got / sec);
+    // time left at the rate of the last 10 s: the mean rate since the start overstates it once the small files are
+    // done and only the critic is still arriving
+    bar.hist.push([now, bar.got]);
+    while (bar.hist.length > 2 && now - bar.hist[1][0] > 10000) bar.hist.shift();
+    const [t1, g1] = bar.hist[0], rate = (bar.got - g1) / ((now - t1) / 1000);
+    if (now - t1 > 3000 && rate > 0) {
+      const left = (total - bar.got) / rate;
       if (left > 90) msg += `, about ${Math.ceil(left / 60)} min left`;
       else if (left > 8) msg += `, about ${Math.ceil(left / 10) * 10} s left`;
     }
@@ -70,7 +75,7 @@ function report(force) {
 // quiet: a background download (label files), not counted in the loading message.
 async function download(url, quiet) {
   if (!quiet) {
-    if (bar.open === 0) Object.assign(bar, { got: 0, total: 0, t0: performance.now(), note: '', label: bar.stage.replace(/…$/, '') });
+    if (bar.open === 0) Object.assign(bar, { got: 0, total: 0, note: '', hist: [], label: bar.stage.replace(/…$/, '') });
     bar.open++; bar.total += sizeOf(url);
   }
   try {
