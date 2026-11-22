@@ -60,9 +60,10 @@ inference (least squares on its inference samples, labelled with the same succes
 
 ## The video
 
-`assets/abi_video.mp4` was recorded from this playground in its capture mode (`?capture&cspeed=<speed>`):
-each video frame shows a fixed amount of simulated time, so the clips play at the stated speed. The
-episodes are examples at fixed start seeds. The success rates below are the measured averages.
+`assets/abi_video.mp4` is a narrated overview (about 3.5 minutes, captions burned in). Its episodes were recorded
+from this playground in its capture mode (`?capture&cspeed=<speed>`): each video frame shows a fixed amount of
+simulated time, and every clip that does not play in real time shows its speed. The episodes are examples at fixed start seeds. The success
+rates below are the measured averages. The method and result shots are animations of the paper's figures and tables.
 
 ## Contents
 
