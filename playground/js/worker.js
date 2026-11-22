@@ -31,14 +31,23 @@ const fetchText = async p => { const r = await fetch(p); if (!r.ok) throw new Er
 const fetchJSON = async p => JSON.parse(await fetchText(p));
 // Downloads. A page needs about 40 MB before it can start (ABI's critic alone is 24 MB on the wire). init() requests
 // every file of that set at once instead of one after another, the loading message counts the megabytes and the time
-// left, and a request that receives nothing for STALL_TICKS free seconds of this thread is restarted: on a slow link the
-// sequential loader showed one stage message for minutes, and a stalled request kept the page loading forever.
+// left, and when no download receives a byte for STALL_TICKS free seconds of this thread, the open requests are restarted:
+// on a slow link the sequential loader showed one stage message for minutes, and a stalled request kept the page
+// loading forever. The stall test is over all downloads together: over HTTP/2 the browser serves the requests of one
+// page roughly one after another, so a request queued behind the 24 MB critic receives nothing for a long time while
+// the connection is busy, and a per-request test restarted it (seen on the live site, 2026-11-22).
 // sizes.json (tests/make_sizes.py) lists the bytes of every file under env/, models/ and vendor/ for the totals.
 const STALL_TICKS = 20, TRIES = 4;
 const ROOT = new URL('../', import.meta.url);
 const ahead = new Map();          // URL -> promise of its bytes, requested ahead of use and handed out once
 const bar = { got: 0, total: 0, open: 0, t0: 0, shown: 0, label: '', stage: '', note: '' };   // downloads the user waits for
 let sizes = {};
+const running = new Set();       // AbortControllers of the open downloads
+let idle = 0, watch = 0;         // free seconds of this thread without a byte on any download
+function watchdog(on) {
+  if (on && !watch) { idle = 0; watch = setInterval(() => { if (++idle >= STALL_TICKS) { idle = 0; for (const ac of running) ac.abort(); } }, 1000); }
+  if (!on && watch && running.size === 0) { clearInterval(watch); watch = 0; }
+}
 const sizeOf = u => sizes[String(u).slice(ROOT.href.length)] || 0;
 function progress(msg) { bar.stage = msg; report(true); }
 function report(force) {
@@ -67,9 +76,9 @@ async function download(url, quiet) {
   try {
     for (let k = 1; ; k++) {
       const ac = new AbortController();
-      let got = 0, idle = 0;
+      let got = 0;
       // A tick only runs while this thread is free, so time spent compiling a model does not count as a stall.
-      const watch = setInterval(() => { if (++idle >= STALL_TICKS) ac.abort(); }, 1000);
+      running.add(ac); watchdog(true);
       try {
         const r = await fetch(url, { signal: ac.signal });
         if (!r.ok) throw Object.assign(new Error(`${url}: ${r.status}`), { final: true });
@@ -89,9 +98,9 @@ async function download(url, quiet) {
       } catch (e) {
         if (!quiet) bar.got -= got;
         if (e.final || k >= TRIES) throw e;
-        if (!quiet) { bar.note = 'slow connection, a stalled request was restarted'; report(true); }
+        if (!quiet) { bar.note = 'the connection stalled, the download was restarted'; report(true); }
       } finally {
-        clearInterval(watch);
+        running.delete(ac); watchdog(false);
       }
     }
   } finally {
