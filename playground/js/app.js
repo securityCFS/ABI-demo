@@ -233,7 +233,7 @@ function syncUI() {
   $('a-val').textContent = cfg.alpha; $('a-row').classList.toggle('off', ext || !guidedMode.startsWith('qgf'));
   const same = ghostOf() === (ext ? cfg.policy : 'bc');
   $('mode-note').textContent = (ext ? (on ? ACTOR_NOTE(policyName()) : `The ${policyName()} alone: its own action at every step, no critic.`) : MODE_NOTE[cfg.mode](cfg))
-    + (on || !same ? '' : ' The gray run is the same policy with the same noise, so the two runs overlap.');
+    + (on || !same ? '' : ' The gray run is the same policy with the same noise, so from a new episode on the two runs overlap.');
   $('method-note').textContent = ext ? 'ABI guides an RL actor by best-of-16 selection, as in the paper.'
     : guidedMode.startsWith('qgf') && models.taskAlpha ? 'On the paper\'s tasks α is set to the value selected in the paper.' : '';
   $('hud-mk').textContent = guidedName();
