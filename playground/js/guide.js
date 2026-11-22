@@ -24,6 +24,9 @@ function dctLowpass(H, keep) {
 }
 
 export class Guide {
+  // The ORT WebAssembly binary, downloaded by the caller together with the models (else ORT fetches it on first use).
+  static useWasm(bytes) { if (!IN_NODE) ort.env.wasm.wasmBinary = bytes; }
+
   static async load(fetchBytes, meta, progress) {
     const g = new Guide(); g.meta = meta;
     const opts = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };

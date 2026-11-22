@@ -17,7 +17,7 @@ let plan = [], ghostPlan = [], history = [], ghostHistory = [];
 let wallStart = 0, simStart = 0, recentMs = [], DT = 0.1, frameEvery = 1, EnvClass = null, settingTask = 0, envMod = null;
 let refFeatures = null;
 const labelCache = new Map();    // label file -> promise of its Float32Array (prefetched after start-up)
-const labelFile = f => { if (!labelCache.has(f)) labelCache.set(f, fetchBytes(new URL(f, modelDir)).then(f32)); return labelCache.get(f); };
+const labelFile = f => { if (!labelCache.has(f)) labelCache.set(f, fetchBytes(new URL(f, modelDir), true).then(f32)); return labelCache.get(f); };
 // The simulation runs ahead of the display by a lead that covers the slowest recent decision, so the
 // display plays at an even pace while a decision is computed.
 const leadMs = () => Math.min(1500, Math.max(250, 1.3 * Math.max(0, ...recentMs) + 80));
@@ -29,23 +29,108 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const yieldTask = () => new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
 const fetchText = async p => { const r = await fetch(p); if (!r.ok) throw new Error(`${p}: ${r.status}`); return r.text(); };
 const fetchJSON = async p => JSON.parse(await fetchText(p));
-const fetchBytes = async p => { const r = await fetch(p); if (!r.ok) throw new Error(`${p}: ${r.status}`); return new Uint8Array(await r.arrayBuffer()); };
+// Downloads. A page needs about 40 MB before it can start (ABI's critic alone is 24 MB on the wire). init() requests
+// every file of that set at once instead of one after another, the loading message counts the megabytes and the time
+// left, and a request that receives nothing for STALL_TICKS free seconds of this thread is restarted: on a slow link the
+// sequential loader showed one stage message for minutes, and a stalled request kept the page loading forever.
+// sizes.json (tests/make_sizes.py) lists the bytes of every file under env/, models/ and vendor/ for the totals.
+const STALL_TICKS = 20, TRIES = 4;
+const ROOT = new URL('../', import.meta.url);
+const ahead = new Map();          // URL -> promise of its bytes, requested ahead of use and handed out once
+const bar = { got: 0, total: 0, open: 0, t0: 0, shown: 0, label: '', stage: '', note: '' };   // downloads the user waits for
+let sizes = {};
+const sizeOf = u => sizes[String(u).slice(ROOT.href.length)] || 0;
+function progress(msg) { bar.stage = msg; report(true); }
+function report(force) {
+  const now = performance.now();
+  if (!force && now - bar.shown < 250) return;
+  bar.shown = now;
+  let msg = bar.stage;
+  if (bar.open > 0) {
+    const mb = x => (x / 1e6).toFixed(1), sec = (now - bar.t0) / 1000, total = Math.max(bar.total, bar.got);
+    msg = `${bar.label}: ${mb(bar.got)} of ${mb(total)} MB`;
+    if (sec > 4 && bar.got > 0) {
+      const left = (total - bar.got) / (bar.got / sec);
+      if (left > 90) msg += `, about ${Math.ceil(left / 60)} min left`;
+      else if (left > 8) msg += `, about ${Math.ceil(left / 10) * 10} s left`;
+    }
+    if (bar.note) msg += ` (${bar.note})`;
+  }
+  post({ type: 'progress', msg });
+}
+// quiet: a background download (label files), not counted in the loading message.
+async function download(url, quiet) {
+  if (!quiet) {
+    if (bar.open === 0) Object.assign(bar, { got: 0, total: 0, t0: performance.now(), note: '', label: bar.stage.replace(/…$/, '') });
+    bar.open++; bar.total += sizeOf(url);
+  }
+  try {
+    for (let k = 1; ; k++) {
+      const ac = new AbortController();
+      let got = 0, idle = 0;
+      // A tick only runs while this thread is free, so time spent compiling a model does not count as a stall.
+      const watch = setInterval(() => { if (++idle >= STALL_TICKS) ac.abort(); }, 1000);
+      try {
+        const r = await fetch(url, { signal: ac.signal });
+        if (!r.ok) throw Object.assign(new Error(`${url}: ${r.status}`), { final: true });
+        const reader = r.body.getReader(), parts = [];
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          idle = 0; parts.push(value); got += value.length;
+          if (!quiet) { bar.got += value.length; report(false); }
+        }
+        // one whole chunk is returned as is; callers view the bytes as Float32Array, so a view at an offset is copied
+        if (parts.length === 1 && parts[0].byteOffset === 0 && parts[0].byteLength === parts[0].buffer.byteLength) return parts[0];
+        const out = new Uint8Array(got);
+        let o = 0;
+        for (const q of parts) { out.set(q, o); o += q.length; }
+        return out;
+      } catch (e) {
+        if (!quiet) bar.got -= got;
+        if (e.final || k >= TRIES) throw e;
+        if (!quiet) { bar.note = 'slow connection, a stalled request was restarted'; report(true); }
+      } finally {
+        clearInterval(watch);
+      }
+    }
+  } finally {
+    if (!quiet) { bar.open--; report(true); }
+  }
+}
+function prefetch(u) {
+  const k = String(u);
+  if (!ahead.has(k)) { const pr = download(k, false); pr.catch(() => {}); ahead.set(k, pr); }
+}
+const fetchBytes = (p, quiet) => {
+  const k = String(p), pr = ahead.get(k);
+  if (pr) { ahead.delete(k); return pr; }
+  return download(k, quiet);
+};
 
 async function init(name, autoplay) {
   const envDir = new URL(`../env/${name}/`, import.meta.url);
   modelDir = new URL(`../models/${name}/`, import.meta.url);
-  post({ type: 'progress', msg: 'Loading MuJoCo…' });
-  mj = await loadMujoco();
-  envMeta = await fetchJSON(new URL('env_meta.json', envDir));
+  const [sz, em, dm] = await Promise.all([fetchJSON(new URL('sizes.json', ROOT)).catch(() => ({})),
+    fetchJSON(new URL('env_meta.json', envDir)), fetchJSON(new URL('demo.json', modelDir))]);
+  sizes = sz; envMeta = em;
+  // the start-up set, all requested now: the two WebAssembly runtimes, the meshes, the base policies and the critic
+  const assetDir = new URL(em.asset_dir || 'assets/', envDir), MJ_WASM = new URL('../vendor/mujoco/mujoco.wasm', import.meta.url);
+  const ORT_WASM = new URL('../vendor/ort/ort-wasm-simd-threaded.wasm', import.meta.url);
+  progress('Downloading the simulator and models…');
+  [MJ_WASM, ORT_WASM, ...(em.assets || []).map(n => new URL(n, assetDir)),
+   ...dm.actors.flatMap(a => [a.propose, a.velocity]).filter(Boolean).map(f => new URL(f, modelDir)),
+   new URL(dm.critic.score, modelDir), ...(dm.critic.ref_xy ? [new URL(dm.critic.ref_xy, modelDir)] : [])].forEach(prefetch);
+  bar.stage = 'Preparing the simulation…';      // shown when the downloads are done
+  mj = await loadMujoco({ wasmBinary: await fetchBytes(MJ_WASM) });
+  progress('Preparing the simulation…');
   envMod = await import(`./envs/${envMeta.kind || 'locomaze'}.js`);
   const { Env } = envMod;
   const xml = await fetchText(new URL('scene.xml', envDir));
   if (Env.prepare) await Env.prepare(mj, envDir, fetchBytes);      // e.g. mesh assets into the WASM file system
   let assets = null;                                                // mesh files the scene references by name
   if (envMeta.assets) {
-    post({ type: 'progress', msg: 'Loading the robot meshes…' });
-    const dir = new URL(envMeta.asset_dir || 'assets/', envDir);
-    const files = await Promise.all(envMeta.assets.map(n => fetchBytes(new URL(n, dir))));
+    const files = await Promise.all(envMeta.assets.map(n => fetchBytes(new URL(n, assetDir))));
     assets = Object.fromEntries(envMeta.assets.map((n, k) => [n, files[k]]));
   }
   EnvClass = Env;
@@ -54,8 +139,9 @@ async function init(name, autoplay) {
   // frames for the display: every substep for short control steps, about 5 per control step otherwise
   const sub = envMeta.substeps || envMeta.n_sub_steps || envMeta.frame_skip || 1;
   frameEvery = Math.max(1, Math.floor(sub / Math.max(1, Math.round(DT * 120))));   // at most about 120 frames per simulated second
-  meta = await fetchJSON(new URL('demo.json', modelDir));
-  guide = await Guide.load(p => fetchBytes(new URL(p, modelDir)), meta, msg => post({ type: 'progress', msg }));
+  meta = dm;
+  Guide.useWasm(await fetchBytes(ORT_WASM));
+  guide = await Guide.load(p => fetchBytes(new URL(p, modelDir)), meta, progress);
   cfg.actor = guide.defaultActor; cfg.policy = cfg.actor;
   // Comparison policies for the ghost run (task-conditioned zero-shot actors), loaded on first selection.
   try {
@@ -99,7 +185,7 @@ function adapt(e) {
 async function baseline(id) {
   if (!baselineMods.has(id)) {
     const spec = baselineSpecs.find(b => b.id === id);
-    post({ type: 'progress', msg: `Loading ${spec.label}…` });
+    progress(`Loading ${spec.label}…`);
     const za = await ZActor.load(p => fetchBytes(new URL(p, modelDir)), spec);   // spec paths are relative to models/<env>/
     za.setRng(new Rng(episodeSeed * 15485863 + 7));
     baselineMods.set(id, za); await taskToBaseline(za);
@@ -116,7 +202,7 @@ async function taskToBaselines() { for (const za of baselineMods.values()) await
 
 const f32 = b => new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4).slice();
 let refPoints = null, refPointsP = null;
-const refPointsFile = () => (refPointsP ||= fetchBytes(new URL(meta.critic.ref_xyz, modelDir)).then(f32).catch(e => { refPointsP = null; throw e; }));
+const refPointsFile = () => (refPointsP ||= fetchBytes(new URL(meta.critic.ref_xyz, modelDir), true).then(f32).catch(e => { refPointsP = null; throw e; }));
 // Reward labels of the reference states for the current task or goal.
 async function labels() {
   const L = meta.critic.labels, k = env.taskIdx, t = k !== null ? envMeta.tasks[k] : null;
@@ -129,7 +215,7 @@ async function labels() {
   // A knob value (DMC): the task's reward at every reference state, from the stored reward features; the QGF tau
   // is that of the nearest preset of the same family (meta.knob_alpha_rule).
   if (meta.critic.features && env.knobTask) {
-    if (!refFeatures) { const b = await fetchBytes(new URL(meta.critic.features, modelDir)); refFeatures = new Float64Array(b.buffer, b.byteOffset, b.byteLength / 8).slice(); }
+    if (!refFeatures) { const b = await fetchBytes(new URL(meta.critic.features, modelDir), true); refFeatures = new Float64Array(b.buffer, b.byteOffset, b.byteLength / 8).slice(); }
     const w = envMod.labels(envMeta, refFeatures, env.knobTask);
     settingTask = envMeta.tasks.indexOf(envMod.nearestPreset(envMeta, env.knobTask));
     return { ...guide.setW(w), mask: null, settingTask, meanLabel: mean(w) };
