@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABI playground</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%276%27 fill=%27%23f0a63a%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%276%27 fill=%27%2376b900%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
 </head>
@@ -30,7 +30,7 @@
       <h4>How it works</h4>
       <ol>
         <li id="intro-1">Pick a task on the right.</li>
-        <li><b class="c-ant">Orange</b>: a frozen policy guided by ABI's critic. <b class="c-ghost">Blue</b>: the same policy without ABI, from the same state.</li>
+        <li><b class="c-ant">Green</b>: a frozen policy guided by ABI's critic. <b class="c-ghost">Gray</b>: the same policy without ABI, from the same state.</li>
         <li>Switch the task, turn guidance off, or let ABI guide a different policy at any time.</li>
       </ol>
       <button id="intro-ok" class="primary">Got it</button>
@@ -46,7 +46,7 @@
       <div class="note" id="task-hint"></div>
     </div>
     <div class="card">
-      <h3><span class="num">2</span>Orange: a frozen policy + ABI</h3>
+      <h3><span class="num">2</span>Green: a frozen policy + ABI</h3>
       <select id="policy" title="The policy that ABI guides"></select>
       <div class="note" id="policy-note"></div>
       <div class="seg" id="guide-toggle">
@@ -70,7 +70,7 @@
     <details class="card" id="advanced">
       <summary>Advanced settings</summary>
       <div id="ghost-block">
-      <h3>Blue run <span class="tag">comparison</span></h3>
+      <h3>Gray run <span class="tag">comparison</span></h3>
       <select id="ghost-policy"><option value="same">the same policy, without ABI</option></select>
       <div class="note" id="ghost-note"></div>
       </div>
@@ -90,7 +90,7 @@
       <h3 class="sp">Display</h3>
       <label class="check"><input type="checkbox" id="auto"> start a new episode automatically</label>
       <label class="check"><input type="checkbox" id="follow"> <span id="follow-label">camera follows the agent</span></label>
-      <label class="check" id="refs-row"><input type="checkbox" id="refs" checked> show reference states on the map (red: labelled by the goal)</label>
+      <label class="check" id="refs-row"><input type="checkbox" id="refs" checked> show reference states on the map (gold: labelled by the goal)</label>
       <label class="check" id="restart-row"><input type="checkbox" id="restart-on-goal"> <span id="restart-label">restart from the start when the goal moves</span></label>
       <div class="row"><button id="step" title="Advance one control step">Step once</button></div>
       <div class="note" id="goal-note"></div>

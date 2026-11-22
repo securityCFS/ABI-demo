@@ -23,6 +23,9 @@ const tally = new Map();
 let values = [], taskIdx = 0, knobTask = null, alphaTask = 0, baselines = [], ghostWarn = {}, guidedMode = 'bfn', defaultBc = null;
 // Video capture (tests/record_video.mjs): the page renders a fixed amount of simulated time per frame on request.
 const CAPTURE = params.has('capture'), CAP_FPS = 30, CAP_SPEED = +(params.get('cspeed') || 1);
+// capture: poses the simulation may run ahead of the recorded frame. A short queue (?cq=6) makes a click or a task
+// switch act at the recorded frame instead of after the queued poses.
+const CAP_Q = Math.max(4, +(params.get('cq') || 150)), CAP_Q_LOW = Math.min(60, Math.max(2, Math.round(CAP_Q * 0.4)));
 let capFrame = 0, capBanner = null, held = false;
 
 worker.onmessage = ev => {
@@ -59,7 +62,7 @@ async function loadRegistry() {
 
 function onReady(m) {
   envMeta = m.envMeta; features = m.features || {}; tasks = m.tasks; models = m.models; cfg = m.cfg;
-  cfg.ghost = true;                                     // the comparison run (blue) is always on
+  cfg.ghost = true;                                     // the comparison run (gray) is always on
   if (cfg.mode !== 'unguided') guidedMode = cfg.mode;
   view = new SceneView($('scene'), m.desc, envMeta);
   view.setGhostVisible(true);
@@ -90,7 +93,7 @@ function onReady(m) {
   });
   buildKnobs();
   baselines = m.baselines || []; defaultBc = cfg.actor; cfg.policy = cfg.policy || cfg.actor; cfg.ghostPolicy = 'same';
-  // orange: the policy ABI guides (behavior cloning, or a zero-shot RL actor where one is exported)
+  // green: the policy ABI guides (behavior cloning, or a zero-shot RL actor where one is exported)
   const group = (label, items) => {
     const g = document.createElement('optgroup'); g.label = label;
     for (const [v, t] of items) { const o = document.createElement('option'); o.value = v; o.textContent = t; g.appendChild(o); }
@@ -100,12 +103,12 @@ function onReady(m) {
   const guided = baselines.filter(b => (models.guideActors || []).includes(b.id));
   if (guided.length) group('Zero-shot RL actor', guided.map(b => [b.id, b.label]));
   $('policy').value = cfg.policy;
-  // blue (advanced): the same policy without ABI by default, or another policy
+  // gray (advanced): the same policy without ABI by default, or another policy
   const bc = models.actors.find(a => a.id === defaultBc);
   for (const [v, t] of [['base', `${bc ? bc.short : 'Flow BC'}, without ABI`], ...baselines.map(b => [b.id, b.short || b.label])]) {
     const o = document.createElement('option'); o.value = v; o.textContent = t; $('ghost-policy').appendChild(o);
   }
-  $('ghost-block').hidden = !baselines.length;          // without RL actors the blue run is always the same policy
+  $('ghost-block').hidden = !baselines.length;          // without RL actors the gray run is always the same policy
   if (!models.qgf) for (const b of document.querySelectorAll('#mode button')) if (b.dataset.mode.startsWith('qgf')) { b.disabled = true; b.title = 'QGF needs the gradient graph, which is not part of this build.'; }
   $('n').max = NV.length - 1; $('n').min = 0; $('n').value = NV.indexOf(cfg.N) >= 0 ? NV.indexOf(cfg.N) : 3;
   $('alpha').max = AV.length - 1; $('alpha').min = 0; $('alpha').value = Math.max(0, AV.indexOf(cfg.alpha));
@@ -204,7 +207,7 @@ function bindUI() {
 }
 
 const isActor = id => baselines.some(b => b.id === id);
-// Display names: the guided policy, and the blue run (whose policy is that of ghostOf, as in the worker).
+// Display names: the guided policy, and the gray run (whose policy is that of ghostOf, as in the worker).
 function policyName(c = cfg) {
   const a = models.actors.find(x => x.id === c.policy) || baselines.find(x => x.id === c.policy);
   return a ? a.short || a.label : c.policy;
@@ -215,7 +218,7 @@ function ghostName(c = cfg) {
   if (g === 'bc') { const a = models.actors.find(x => x.id === c.actor); return `${a ? a.short : 'Flow BC'}, without ABI`; }
   const b = baselines.find(x => x.id === g); return `${b ? b.short || b.label : g}${g === c.policy ? ', without ABI' : ''}`;
 }
-function orangeName(c = cfg) { return c.mode === 'unguided' ? `${policyName(c)}, without ABI` : `${policyName(c)} + ABI`; }
+function guidedName(c = cfg) { return c.mode === 'unguided' ? `${policyName(c)}, without ABI` : `${policyName(c)} + ABI`; }
 
 function syncUI() {
   const on = cfg.mode !== 'unguided', ext = isActor(cfg.policy);
@@ -230,14 +233,15 @@ function syncUI() {
   $('a-val').textContent = cfg.alpha; $('a-row').classList.toggle('off', ext || !guidedMode.startsWith('qgf'));
   const same = ghostOf() === (ext ? cfg.policy : 'bc');
   $('mode-note').textContent = (ext ? (on ? ACTOR_NOTE(policyName()) : `The ${policyName()} alone: its own action at every step, no critic.`) : MODE_NOTE[cfg.mode](cfg))
-    + (on || !same ? '' : ' The blue run is the same policy with the same noise, so the two runs overlap.');
+    + (on || !same ? '' : ' The gray run is the same policy with the same noise, so the two runs overlap.');
   $('method-note').textContent = ext ? 'ABI guides an RL actor by best-of-16 selection, as in the paper.'
     : guidedMode.startsWith('qgf') && models.taskAlpha ? 'On the paper\'s tasks α is set to the value selected in the paper.' : '';
-  $('hud-mk').textContent = orangeName();
+  $('hud-mk').textContent = guidedName();
+  document.body.classList.toggle('unguided', !on); view.setGuided(on); if (map) map.col = null;   // gray without ABI
   const a = models.actors.find(x => x.id === cfg.policy) || baselines.find(x => x.id === cfg.policy);
   $('policy-note').textContent = a ? (a.note || '') + (ghostWarn[cfg.policy] ? ' ' + ghostWarn[cfg.policy] : '') : '';
   const gb = baselines.find(x => x.id === ghostOf());
-  $('ghost-note').textContent = gb && gb.id !== cfg.policy ? (gb.note || '') + (ghostWarn[gb.id] ? ' ' + ghostWarn[gb.id] : '') : 'The blue run starts from the same state as the orange run.';
+  $('ghost-note').textContent = gb && gb.id !== cfg.policy ? (gb.note || '') + (ghostWarn[gb.id] ? ' ' + ghostWarn[gb.id] : '') : 'The gray run starts from the same state as the green run.';
   $('scores-note').textContent = ext ? `The 16 actions of the ${policyName()} at the last decision, each scored as the mean over its 4 completed chunks. The highlighted one is executed.`
     : 'The N proposals of the policy at the last decision. The highlighted one is executed.';
   $('hud-gk').textContent = ghostName();
@@ -258,7 +262,7 @@ function sendCfg() { worker.postMessage({ type: 'config', cfg: { ...cfg } }); }
 function onFrames(m) {
   for (let k = 0; k < m.n; k++) queue.push({ dt: m.dt, main: m.main.subarray(k * frameLen, (k + 1) * frameLen), ghost: m.ghost ? m.ghost.subarray(k * frameLen, (k + 1) * frameLen) : null });
   // When the display falls behind, skip poses but keep every trail point, so trails stay continuous.
-  if (CAPTURE) { if (queue.length > 150 && !held) { held = true; worker.postMessage({ type: 'hold', on: true }); } }
+  if (CAPTURE) { if (queue.length > CAP_Q && !held) { held = true; worker.postMessage({ type: 'hold', on: true }); } }
   else if (queue.length > 1500) while (queue.length > 200) skim(queue.shift());
 }
 // The worker runs ahead of the display. Messages about a step are queued behind that step's frames, so the
@@ -333,8 +337,8 @@ function key(c) {
 }
 function ghostKey(c) {
   const g = ghostOf(c), tn = taskName(c.task, c.knob), t = tn !== 'custom' ? `${tn} · ` : '';
-  if (g === 'bc') return key({ ...c, policy: c.actor, mode: 'unguided' }) + ' (blue)';
-  return `${t}${ghostName(c)} (blue)`;
+  if (g === 'bc') return key({ ...c, policy: c.actor, mode: 'unguided' }) + ' (gray)';
+  return `${t}${ghostName(c)} (gray)`;
 }
 function record(k, r) {
   const s = tally.get(k) || { n: 0, s: 0, steps: 0, ret: 0 }; s.n++; s.ret += r.ret; if (r.success) { s.s++; s.steps += r.t; } tally.set(k, s);
@@ -406,7 +410,7 @@ function drawScores(d) {
   const lo = Math.min(...s), hi = Math.max(...s), span = hi - lo || 1, n = s.length, bw = Math.max(2, (w - 4) / n - 2);
   s.forEach((v, k) => {
     const h = 8 + 70 * (v - lo) / span, x = 2 + k * (bw + 2);
-    g.fillStyle = k === d.chosen ? '#f0a63a' : '#4a5568'; g.fillRect(x, 86 - h, bw, h);
+    g.fillStyle = k === d.chosen ? '#76b900' : '#4a5568'; g.fillRect(x, 86 - h, bw, h);
   });
   g.fillStyle = '#98a2b3'; g.font = '11px system-ui'; g.fillText(`min ${lo.toPrecision(3)}  max ${hi.toPrecision(3)}`, 4, 11);
 }
@@ -418,7 +422,7 @@ function drawValues() {
   if (values.length < 2) return;
   const vs = values.map(v => v[1]), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
   const t0 = values[0][0], t1 = Math.max(values[values.length - 1][0], t0 + 50);
-  g.strokeStyle = '#f0a63a'; g.lineWidth = 1.5; g.beginPath();
+  g.strokeStyle = '#76b900'; g.lineWidth = 1.5; g.beginPath();
   values.forEach(([t, v], k) => { const x = 4 + (w - 8) * (t - t0) / (t1 - t0), y = H - 6 - (H - 18) * (v - lo) / span; k ? g.lineTo(x, y) : g.moveTo(x, y); });
   g.stroke();
   g.fillStyle = '#98a2b3'; g.font = '11px system-ui'; g.fillText(`${lo.toPrecision(3)} … ${hi.toPrecision(3)}`, 6, 12);
@@ -454,11 +458,14 @@ function setupCapture() {
     frame() {
       const need = CAP_SPEED / CAP_FPS;
       let have = 0; for (const f of queue) if (!f.ev) { have += f.dt; if (have >= need) break; }
-      if (have < need - 1e-9 && playing) return null;
+      if (have < need - 1e-9 && playing) {     // not enough poses yet: let the simulation run (a short ?cq queue can be
+        if (held) { held = false; worker.postMessage({ type: 'hold', on: false }); }   // held with too few poses for a frame)
+        return null;
+      }
       cursor = (cursor || 0) + need;
       while (queue.length && (queue[0].ev || cursor >= queue[0].dt - 1e-9)) { const f = queue.shift(); if (f.ev) f.ev(); else { apply(f); cursor -= f.dt; } }
       if (!queue.length) cursor = 0;
-      if (held && queue.length < 60) { held = false; worker.postMessage({ type: 'hold', on: false }); }
+      if (held && queue.length < CAP_Q_LOW) { held = false; worker.postMessage({ type: 'hold', on: false }); }
       view.render(); capFrame++;
       if (window.__cap.ui) return true;
       const W = view.canvas.width, H = view.canvas.height, s = H / 720;
@@ -467,11 +474,11 @@ function setupCapture() {
       if (window.__cap.clean) return out.toDataURL('image/jpeg', 0.92);
       const c = window.__cap.caption;
       if (c) pill(24 * s, 22 * s, [[c.title, 28, 700], ...(c.sub ? [[c.sub, 19, 400, '#c5ccd8']] : [])], s);
-      const lg = window.__cap.legend || [orangeName(), ghostName()];
+      const lg = window.__cap.legend || [guidedName(), ghostName()];
       g.font = font(19 * s, 600);
       const lw = Math.max(g.measureText(lg[0]).width, g.measureText(lg[1]).width) + 62 * s, lh = 72 * s, lx = 24 * s, ly = H - lh - 22 * s;
       g.fillStyle = 'rgba(15,18,24,0.78)'; g.beginPath(); g.roundRect(lx, ly, lw, lh, 10 * s); g.fill();
-      [[lg[0], '#f0a63a'], [lg[1], '#6fa8ff']].forEach(([t, col], k) => {
+      [[lg[0], cfg.mode === 'unguided' ? '#a9b0a6' : '#76b900'], [lg[1], '#a9b0a6']].forEach(([t, col], k) => {
         const y = ly + 14 * s + k * 26 * s;
         g.fillStyle = col; g.beginPath(); g.arc(lx + 24 * s, y + 10 * s, 8 * s, 0, 2 * Math.PI); g.fill();
         g.fillStyle = '#e6e9ef'; g.textBaseline = 'top'; g.fillText(t, lx + 42 * s, y);
@@ -481,7 +488,7 @@ function setupCapture() {
         g.fillStyle = '#c5ccd8'; g.fillText(t, W - tw - 38 * s, 30 * s); }
       if (capBanner && capFrame <= capBanner.until) {
         g.font = font(22 * s, 600); const tw = g.measureText(capBanner.text).width, bx = (W - tw) / 2 - 18 * s, by = ly - 58 * s;
-        g.fillStyle = 'rgba(22,27,35,0.92)'; g.strokeStyle = capBanner.cls === 'ok' ? '#5cc28c' : capBanner.cls === 'fail' ? '#ef4f63' : '#2a3240';
+        g.fillStyle = 'rgba(22,27,35,0.92)'; g.strokeStyle = capBanner.cls === 'ok' ? '#76b900' : capBanner.cls === 'fail' ? '#ef4f63' : '#2a3240';
         g.lineWidth = 2 * s; g.beginPath(); g.roundRect(bx, by, tw + 36 * s, 44 * s, 9 * s); g.fill(); g.stroke();
         g.fillStyle = capBanner.cls === 'ok' ? '#b9f0cf' : capBanner.cls === 'fail' ? '#ffc2ca' : '#e6e9ef'; g.fillText(capBanner.text, bx + 18 * s, by + 10 * s);
       }

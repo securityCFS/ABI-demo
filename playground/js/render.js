@@ -8,8 +8,11 @@ const GEOM = { PLANE: 0, HFIELD: 1, SPHERE: 2, CAPSULE: 3, ELLIPSOID: 4, CYLINDE
 
 const PALETTE = {
   floorA: 0x1d2430, floorB: 0x262f3d, wall: 0xc9ccd3, wallTop: 0xe4e6ea,
-  ant: 0xd9922e, antJoint: 0xb5741c, ghost: 0x6fa8ff, goal: 0xe8475a, start: 0x5cc28c,
-  trail: 0xf0b45a, ghostTrail: 0x7fb2ff, sky: 0x10141b,
+  // the paper's palette: ABI green (guided run), gray (comparison run), gold goal on the maze; the cube target keeps the
+  // environment's red
+  ant: 0x76b900, antJoint: 0x4f8a10, ghost: 0xa9b0a6, goal: 0xe8475a, goalMaze: 0xeec14a, start: 0xf2f4f0,
+  trail: 0x8fd11a, ghostTrail: 0x7d857c, sky: 0x10141b,
+  antOff: 0xa9b0a6, antJointOff: 0x7d857c, trailOff: 0xb4bab1,     // the main run without ABI
 };
 
 function checkerTexture(n = 32, ny = n) {
@@ -120,7 +123,7 @@ export class SceneView {
       setPose(mesh, [...g.pos, ...g.mat], 0);
       scene.add(mesh);
       if (g.body !== 0) {
-        mesh.userData.dyn = desc.dynamic.indexOf(g.id); this.mainGeoms.push(mesh);
+        mesh.userData.dyn = desc.dynamic.indexOf(g.id); mesh.userData.joint = /ankle/.test(g.name); this.mainGeoms.push(mesh);
         const gm = new THREE.Mesh(geo, ghostMat); gm.matrixAutoUpdate = false; gm.visible = false; gm.renderOrder = 2;
         gm.userData.dyn = mesh.userData.dyn; setPose(gm, [...g.pos, ...g.mat], 0); scene.add(gm); this.ghostGeoms.push(gm);
       }
@@ -157,15 +160,21 @@ export class SceneView {
     this.goalBox.add(new THREE.Mesh(new THREE.SphereGeometry(rad * 0.15, 16, 8), new THREE.MeshBasicMaterial({ color: PALETTE.goal })));
     this.goalBox.visible = false; this.scene.add(this.goalBox);
     if (!g) { this.goal = grp; grp.visible = false; this.scene.add(grp); return; }
-    const disk = new THREE.Mesh(new THREE.CircleGeometry(this.meta.goal_tol, 48), new THREE.MeshBasicMaterial({ color: PALETTE.goal, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+    const gc = PALETTE.goalMaze;
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(this.meta.goal_tol, 48), new THREE.MeshBasicMaterial({ color: gc, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
     disk.position.z = 0.03;
-    const ring = new THREE.Mesh(new THREE.RingGeometry(this.meta.goal_tol * 0.92, this.meta.goal_tol, 48), new THREE.MeshBasicMaterial({ color: PALETTE.goal, side: THREE.DoubleSide }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(this.meta.goal_tol * 0.92, this.meta.goal_tol, 48), new THREE.MeshBasicMaterial({ color: gc, side: THREE.DoubleSide }));
     ring.position.z = 0.035;
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3, 12), new THREE.MeshBasicMaterial({ color: PALETTE.goal, transparent: true, opacity: 0.6 }));
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3, 12), new THREE.MeshBasicMaterial({ color: gc, transparent: true, opacity: 0.6 }));
     beam.rotation.x = Math.PI / 2; beam.position.z = 1.5;
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 12), new THREE.MeshStandardMaterial({ color: PALETTE.goal, emissive: 0x5a0a14 }));
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 12), new THREE.MeshStandardMaterial({ color: gc, emissive: 0x5a4300 }));
     cap.position.z = 3.0;
     grp.add(disk, ring, beam, cap); this.goal = grp; this.scene.add(grp);
+  }
+
+  setGuided(on) {     // the main run in ABI green when guided, in gray without ABI (the maze ant and every trail)
+    this.trail.line.material.color.setHex(on ? PALETTE.trail : PALETTE.trailOff);
+    if (this.palette) for (const m of this.mainGeoms) m.material.color.setHex(m.userData.joint ? (on ? PALETTE.antJoint : PALETTE.antJointOff) : (on ? PALETTE.ant : PALETTE.antOff));
   }
 
   makeTrail(color, opacity) {

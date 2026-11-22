@@ -19,8 +19,8 @@ loads only its own files.
 
 ## What you can do
 
-The page starts an episode right away. The orange agent is a frozen policy guided by ABI's critic. The
-blue agent is the same policy without ABI, started from the same state with the same random draws.
+The page starts an episode right away. The green agent is a frozen policy guided by ABI's critic. The
+gray agent is the same policy without ABI, started from the same state with the same random draws.
 
 - **Goal.** Cube: click inside the marked area on the table to place the cube's target. AntMaze: click
   the floor or the map to place a goal, shift+click (or right-click on the map) to set the start. The
@@ -36,7 +36,7 @@ blue agent is the same policy without ABI, started from the same state with the 
   16 candidate actions (see below).
 - **Execution** (*Advanced settings*). Replan at every step (execute the first action of the chosen
   chunk, the paper's main protocol) or execute the whole 8-step chunk.
-- **Blue run** (*Advanced settings*). Instead of the same policy without ABI, the blue run can be the
+- **Gray run** (*Advanced settings*). Instead of the same policy without ABI, the gray run can be the
   unguided Flow BC or, on Cube and AntMaze, the trained actor of TD-JEPA or of one-step FB. These actors
   read the goal through their own zero-shot task inference.
 
@@ -131,7 +131,7 @@ The DMC critic reads a task through a ridge readout of its reference states. The
 into the critic graph, so a task only sets the 10,000 reference labels. Its latent matches the paper's
 to about 1e-7 relative.
 
-**Zero-shot RL actors without ABI (blue run), 100 and 500 episodes over the five tasks**
+**Zero-shot RL actors without ABI (gray run), 100 and 500 episodes over the five tasks**
 
 | environment | actor | this demo (100 / 500) | paper evaluation (100) |
 |---|---|---|---|

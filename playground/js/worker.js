@@ -6,7 +6,7 @@ import { Guide } from './guide.js';
 
 let mj, env, ghost, guide, meta, envMeta, modelDir;
 // policy: the policy ABI guides, a Flow BC id of demo.json (cfg.actor = that id) or a zero-shot RL actor of
-// baselines.json (cfg.actor = the default Flow BC, whose flow completes the actor's candidates). ghostPolicy: the blue
+// baselines.json (cfg.actor = the default Flow BC, whose flow completes the actor's candidates). ghostPolicy: the gray
 // run, 'same' (the same policy without ABI), 'base' (Flow BC without ABI) or an actor id.
 let cfg = { actor: null, policy: null, mode: 'bfn', N: 16, alpha: 0.1, hexec: 1, ghost: true, ghostPolicy: 'same' };
 let hold = false;     // video capture: the page asks the simulation to wait while its frame queue is long
@@ -191,8 +191,8 @@ function newEpisode() {
   rngReset = new Rng(episodeSeed * 7919 + 13);
   rngMain = new Rng(episodeSeed * 104729 + 1);
   rngGhost = new Rng(episodeSeed * 104729 + 1);     // same noise stream as the main run's first draw
-  // an RL actor's own action draws its noise from ownMain / ownGhost (the same stream, so the unguided blue run is the
-  // orange run without ABI), its further candidates and the flow tails from rngActor
+  // an RL actor's own action draws its noise from ownMain / ownGhost (the same stream, so the unguided gray run is the
+  // green run without ABI), its further candidates and the flow tails from rngActor
   ownMain = new Rng(episodeSeed * 15485863 + 7); ownGhost = new Rng(episodeSeed * 15485863 + 7);
   rngActor = new Rng(episodeSeed * 15485863 + 11);
   env.reset(rngReset); ghost.copyStateFrom(env);
@@ -223,7 +223,7 @@ function sendFrame(mainBatch, ghostBatch) {
 }
 
 const isActor = id => baselineSpecs.some(b => b.id === id);
-// The blue run's policy: an actor id, or 'bc' (the Flow BC of cfg.actor without ABI).
+// The gray run's policy: an actor id, or 'bc' (the Flow BC of cfg.actor without ABI).
 function ghostOf(c) {
   const g = c.ghostPolicy || 'same';
   if (g === 'same') return isActor(c.policy) ? c.policy : 'bc';
@@ -306,7 +306,7 @@ self.onmessage = async ev => {
       case 'config': {
         const prevG = cfg.ghost, prevGp = ghostOf(cfg), prevBc = cfg.actor, prevPol = cfg.policy; Object.assign(cfg, m.cfg);
         const gp = ghostOf(cfg);
-        // a newly chosen blue policy starts from the orange run's current state
+        // a newly chosen gray policy starts from the green run's current state
         if (cfg.ghost && (!prevG || gp !== prevGp || (gp === 'bc' && cfg.actor !== prevBc))) { ghost.copyStateFrom(env); ghost.t = env.t; ghostPlan = []; ghostHistory = history.slice(); }
         plan = cfg.policy !== prevPol ? [] : plan.slice(0, cfg.hexec);
         break;
