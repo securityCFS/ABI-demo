@@ -6,6 +6,16 @@
 <title>ABI: Actor-Free Behavior-Induced Representations for Zero-Shot Test-Time Guidance</title>
 <meta name="description" content="ABI: actor-free behavior-induced representations for zero-shot test-time guidance. Project page with a video and an in-browser MuJoCo playground.">
 <link rel="icon" href="assets/abi_bear.svg" type="image/svg+xml">
+<meta name="citation_title" content="ABI: Actor-Free Behavior-Induced Representations for Zero-Shot Test-Time Guidance">
+<meta name="citation_author" content="Yao, Yifei">
+<meta name="citation_author" content="Zou, Yude">
+<meta name="citation_author" content="Jiao, Guanbo">
+<meta name="citation_author" content="Ma, Jianming">
+<meta name="citation_author" content="Gao, Xing">
+<meta name="citation_author" content="Shen, Chunhua">
+<meta name="citation_publication_date" content="2026/11/23">
+<meta name="citation_arxiv_id" content="2611.30636">
+<meta name="citation_pdf_url" content="https://arxiv.org/pdf/2611.30636">
 <style>
 :root {
   --bg: #fbfaf7; --surface: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e4e1d8; --accent: #4f8a10; --accent-2: #6aa81e;
@@ -39,6 +49,18 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .hero h1 { margin: 0 auto; max-width: 900px; font-size: clamp(28px, 4.2vw, 44px); line-height: 1.15; letter-spacing: -.01em; font-weight: 750; }
 .hero h1 .abbr { color: var(--accent); }
 .hero .venue { margin-top: 14px; color: var(--muted); font-size: 16px; }
+.authors { margin: 18px auto 0; max-width: 860px; font-size: 18px; line-height: 1.5; }
+.authors .au { white-space: nowrap; margin: 0 9px; }
+.authors sup, .affils sup { font-size: .68em; color: var(--muted); margin-left: 1px; }
+.affils { margin: 6px auto 0; max-width: 1000px; color: var(--muted); font-size: 15px; line-height: 1.5; }
+.affils .af { white-space: nowrap; margin: 0 8px; }
+.affils .eq { display: block; margin-top: 2px; font-size: 14px; }
+.bib { position: relative; }
+.bib pre { margin: 0; padding: 16px 18px; background: var(--code); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto;
+  font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); }
+.bib button { position: absolute; top: 10px; right: 10px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); font: 600 13px system-ui, sans-serif; cursor: pointer; }
+.bib button:hover { border-color: var(--accent); }
 .btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 999px; text-decoration: none; font-weight: 650;
   font-size: 16px; border: 1px solid var(--line); color: var(--text); background: var(--surface); box-shadow: var(--shadow); }
@@ -89,6 +111,7 @@ footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; text-align:
   .hero { padding-top: 36px; }
   figure .img { padding: 6px; }
   .abstract p { text-align: left; }
+  .bib pre { padding-top: 46px; }
 }
 </style>
 </head>
@@ -96,10 +119,26 @@ footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; text-align:
 <header class="hero wrap">
   <img class="logo" src="assets/abi_bear.svg" alt="">
   <h1><span class="abbr">ABI</span>: Actor-Free Behavior-Induced Representations for Zero-Shot <span class="nw">Test-Time</span> Guidance</h1>
+  <div class="authors">
+    <span class="au">Yifei Yao<sup>1,*</sup></span>
+    <span class="au">Yude Zou<sup>2,*</sup></span>
+    <span class="au">Guanbo Jiao<sup>3,*</sup></span>
+    <span class="au">Jianming Ma<sup>2</sup></span>
+    <span class="au">Xing Gao<sup>1</sup></span>
+    <span class="au">Chunhua Shen<sup>4</sup></span>
+  </div>
+  <div class="affils">
+    <span class="af"><sup>1</sup>Shanghai Artificial Intelligence Laboratory</span>
+    <span class="af"><sup>2</sup>Shanghai Jiao Tong University</span>
+    <span class="af"><sup>3</sup>Fudan University</span>
+    <span class="af"><sup>4</sup>Zhejiang University</span>
+    <span class="eq"><sup>*</sup>Equal contribution</span>
+  </div>
   <div class="btns">
+    <a class="btn" href="https://arxiv.org/abs/2611.30636"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>Paper</a>
     <a class="btn" href="#video"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Video</a>
     <a class="btn primary" href="playground/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z" fill="currentColor"/></svg>Open the playground</a>
-    <a class="btn" href="#abstract">Abstract</a>
+    <a class="btn" href="#citation">BibTeX</a>
   </div>
 </header>
 
@@ -155,6 +194,33 @@ footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; text-align:
   </figure>
 </section>
 
+<section class="wrap" id="citation">
+  <h2>Citation</h2>
+  <div class="bib">
+<pre id="bibtex">@article{yao2026abi,
+  title   = {{ABI}: Actor-Free Behavior-Induced Representations for Zero-Shot Test-Time Guidance},
+  author  = {Yao, Yifei and Zou, Yude and Jiao, Guanbo and Ma, Jianming and Gao, Xing and Shen, Chunhua},
+  journal = {arXiv preprint arXiv:2611.30636},
+  year    = {2026}
+}</pre>
+    <button type="button" id="copybib">Copy</button>
+  </div>
+</section>
+
 <footer class="wrap">The playground runs MuJoCo and all networks in your browser. Nothing is sent anywhere.</footer>
+<script>
+(function () {
+  var b = document.getElementById('copybib');
+  if (!b) return;
+  b.addEventListener('click', function () {
+    var t = document.getElementById('bibtex').textContent;
+    function done(ok) { b.textContent = ok ? 'Copied' : 'Select and copy'; setTimeout(function () { b.textContent = 'Copy'; }, 1600); }
+    try {
+      if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(t).then(function () { done(true); }, function () { done(false); }); return; }
+    } catch (e) {}
+    try { var r = document.createRange(); r.selectNodeContents(document.getElementById('bibtex')); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); done(document.execCommand('copy')); } catch (e) { done(false); }
+  });
+})();
+</script>
 </body>
 </html>

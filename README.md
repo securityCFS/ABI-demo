@@ -1,5 +1,7 @@
 # ABI: Actor-Free Behavior-Induced Representations for Zero-Shot Test-Time Guidance
 
+Paper: [arXiv:2611.30636](https://arxiv.org/abs/2611.30636). Project page: <https://securitycfs.github.io/ABI-demo/>.
+
 Project page and interactive playground. `index.html` is the project page (abstract, video, figures).
 `playground/` is a fully local demo of ABI's critic guiding frozen policies in OGBench `cube-single-play`
 and `antmaze-medium-navigate` and in the DeepMind Control quadruped, cheetah and walker. Physics (MuJoCo,
@@ -143,3 +145,14 @@ to about 1e-7 relative.
 The QGF strengths of the five tasks are the ones selected on development episodes in the paper. For a
 goal you place yourself the slider value is used (Cube: the strength and gripper rule of the nearest
 task).
+
+## Citation
+
+```bibtex
+@article{yao2026abi,
+  title   = {{ABI}: Actor-Free Behavior-Induced Representations for Zero-Shot Test-Time Guidance},
+  author  = {Yao, Yifei and Zou, Yude and Jiao, Guanbo and Ma, Jianming and Gao, Xing and Shen, Chunhua},
+  journal = {arXiv preprint arXiv:2611.30636},
+  year    = {2026}
+}
+```
