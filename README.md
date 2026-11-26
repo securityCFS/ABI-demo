@@ -1,6 +1,6 @@
 # ABI: Actor-Free Behavior-Induced Representations for Zero-Shot Test-Time Guidance
 
-Paper: [arXiv:2611.30636](https://arxiv.org/abs/2611.30636). Project page: <https://securitycfs.github.io/ABI-demo/>.
+Paper: [arXiv:2611.30636](https://arxiv.org/abs/2611.30636). Code: [securityCFS/ABI](https://github.com/securityCFS/ABI). Project page: <https://securitycfs.github.io/ABI-demo/>.
 
 Project page and interactive playground. `index.html` is the project page (abstract, video, figures).
 `playground/` is a fully local demo of ABI's critic guiding frozen policies in OGBench `cube-single-play`
